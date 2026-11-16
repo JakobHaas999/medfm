@@ -51,7 +51,7 @@ def setup_vendor(main_path=None, force=False):
                 updated = re.sub(r"(\bimport\s+)tabpfn(?=[.\s]|$)", rf"\1{package}", updated)
                 updated = re.sub(r'''(["'])tabpfn(?=\.)''', rf"\1{package}", updated)
                 if updated != original:
-                    notice = f"# Modified for this benchmark: package imports renamed to {package}.\n"
+                    notice = f"# Modified for this project: package imports renamed to {package}.\n"
                     path.write_text(notice + updated, encoding="utf-8")
 
             # 3. Preserve the upstream license and record the source version.

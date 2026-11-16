@@ -18,7 +18,7 @@ _THREAD_LIMITER = None
 def initialize_worker():
     """Configure the main process or a new worker once, before model execution.
 
-    Also limit libraries that a notebook imported before benchmark. PyTorch's
+    Also limit libraries that a notebook imported before medfm. PyTorch's
     inter-operation setting can only be changed before parallel work starts;
     an existing kernel may therefore need a restart.
     """
@@ -36,7 +36,7 @@ def initialize_worker():
             torch.set_num_interop_threads(1)
         except RuntimeError as error:
             raise RuntimeError(
-                "Restart the Python process or notebook kernel, then import benchmark "
+                "Restart the Python process or notebook kernel, then import medfm "
                 "before running model computations to enable one-thread execution."
             ) from error
     # Keep the limit active for the lifetime of this process.

@@ -70,7 +70,7 @@ def main(argv=None):
     # Use a plotting backend that saves figures without opening windows.
     import matplotlib
     matplotlib.use('Agg')
-    from benchmark import (
+    from medfm import (
         SENSITIVITY,
         SETTINGS,
         calculate_bayes_auc,
@@ -82,7 +82,7 @@ def main(argv=None):
         save_outputs,
         simulation,
     )
-    from benchmark.simulation_core import evaluate_on_sim_data
+    from medfm.simulation_core import evaluate_on_sim_data
 
     # Validate selections before creating an output folder or running models.
     if args.analysis in ('pilot', 'simulation', 'sensitivity'):
@@ -107,18 +107,18 @@ def main(argv=None):
 
     # Report existing results without loading data or fitting models.
     if args.analysis == 'report':
-        from benchmark.plot_functions import (
+        from medfm.plot_functions import (
             plot_boxplots_grid,
             plot_effect_forest,
             plot_gain_heatmap,
             plot_roc_curves_grid,
             plot_runtime_barplot_simple,
         )
-        from benchmark.table_functions import (
+        from medfm.table_functions import (
             METRICS, build_measures_table, build_gain_table,
             build_best_methods_table, build_effect_table,
         )
-        from benchmark.utils import discover_sim, load_fixed, read_bayes_auc, read_labels
+        from medfm.utils import discover_sim, load_fixed, read_bayes_auc, read_labels
         files = {path.stem: path for path in sorted(args.results.glob('*.csv'))}
         if not files:
             parser.error('no result CSV files found in --results directory')

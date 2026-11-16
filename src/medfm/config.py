@@ -1,4 +1,4 @@
-#src/config.py
+# src/medfm/config.py
 from pathlib import Path
 
 # src/config.py → parent.parent → project root

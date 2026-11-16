@@ -2,8 +2,8 @@
 
 **Built with PriorLabs-TabPFN**
 
-Simualtions comparing logistic regression, Random Forest, XGBoost,
-CatBoost, QDA, QUADRO, TabPFN (2.5, 2.6, 3, and 3.5), EXAONE Tabular, and TabICL v1/v2.
+Simulations comparing logistic regression, Random Forest, XGBoost,
+CatBoost, QDA, TabPFN (2.5, 2.6, 3, and 3.5), EXAONE Tabular, and TabICL v1/v2.
 Experiments use synthetic scenarios or repeated sampling from three medical datasets.
 
 ## 1. Prepare the environment
@@ -66,10 +66,10 @@ uv --version
 On servers with this error, from the project directory, run:
 
 ```bash
-export BENCHMARK_CACHE="$(mktemp -d /tmp/benchmark-cache-XXXXXXXX)"
-export UV_CACHE_DIR="$BENCHMARK_CACHE/uv"
-export TABPFN_MODEL_CACHE_DIR="$BENCHMARK_CACHE/tabpfn"
-export HF_HOME="$BENCHMARK_CACHE/huggingface"
+export MEDFM_CACHE="$(mktemp -d /tmp/medfm-cache-XXXXXXXX)"
+export UV_CACHE_DIR="$MEDFM_CACHE/uv"
+export TABPFN_MODEL_CACHE_DIR="$MEDFM_CACHE/tabpfn"
+export HF_HOME="$MEDFM_CACHE/huggingface"
 export HF_HUB_CACHE="$HF_HOME/hub"
 export UV_LINK_MODE=copy
 
@@ -163,7 +163,7 @@ Default ensemble settings and pretrained checkpoint filenames (check out noteboo
 The four TabPFN source packages are included in `vendor/`. No additional vendor
 setup is needed for normal runs.
 Their local names (`tabpfn_v25`, `tabpfn_v26`, `tabpfn_v3`, and `tabpfn_v35`)
-allow the versions to be imported together for side-by-side benchmarking.
+allow the versions to be imported together for side-by-side comparison.
 
 
 Both TabICL runners leave the ensemble size unset and use the installed package's
@@ -180,7 +180,7 @@ the [TabICL API](https://tabicl.readthedocs.io/en/latest/api.html).
 
 ## Licenses
 
-The benchmark's own code uses the MIT license. The TabPFN copies retain their
+The project's own code uses the MIT license. The TabPFN copies retain their
 upstream licenses in their individual vendor folders; those licenses apply to
 the copied sources. See the upstream license texts for
 [v6.0.0](https://github.com/PriorLabs/TabPFN/blob/v6.0.0/LICENSE),
