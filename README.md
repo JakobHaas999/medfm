@@ -3,7 +3,7 @@
 **Built with PriorLabs-TabPFN**
 
 Simulations comparing logistic regression, Random Forest, XGBoost,
-CatBoost, QDA, TabPFN (2.5, 2.6, 3, and 3.5), EXAONE Tabular, and TabICL v1/v2.
+CatBoost, QDA, QUADRO, TabPFN (2.5, 2.6, 3, and 3.5), EXAONE Tabular, and TabICL v1/v2.
 Experiments use synthetic scenarios or repeated sampling from three medical datasets.
 
 ## 1. Prepare the environment
@@ -173,6 +173,7 @@ the [TabICL API](https://tabicl.readthedocs.io/en/latest/api.html).
 ## Files
 
 - `src/medfm/`: data loading, settings, model runners, analysis, and reporting.
+- `src/quadro/`: the QUADRO classifier and its mathematical solvers.
 - `vendor/`: the four renamed TabPFN source copies.
 - `scripts/`: main function to run analysis and get reports.
 - `notebooks/run_analysis.ipynb`: model checks, pilot, and reports from saved results.

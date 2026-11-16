@@ -23,6 +23,8 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import GridSearchCV
 from sklearn.preprocessing import StandardScaler
 
+from . import config
+
 
 def _class_error(y_true, y_pred):
     """Misclassification rate at the runner's hard prediction cutoff."""
@@ -32,13 +34,12 @@ def _class_error(y_true, y_pred):
 def _configure_pretrained_credentials():
     """Load literal tokens from .secrets/token.py; environment values win."""
     import ast
-    from pathlib import Path
 
     names = {"HF_TOKEN", "TABPFN_TOKEN"}
     if all(os.environ.get(name) for name in names):
         return
 
-    token_path = Path(__file__).resolve().parents[2] / ".secrets" / "token.py"
+    token_path = config.PROJECT_ROOT / ".secrets" / "token.py"
     if not token_path.is_file():
         return
 
@@ -467,6 +468,82 @@ def run_qda(X_train, X_test, y_train, y_test, X_train_sub, y_train_sub, X_val, y
         brier,
         setup_time, tune_time, fit_time, predict_time,
     )
+
+
+################################################################################
+# QUADRO
+def run_quadro(X_train, X_test, y_train, y_test,
+               X_train_sub, y_train_sub, X_val, y_val,
+               random_state=None, *, metrics=None, solver="admm"):
+    """Tune QUADRO penalties, fit once on standardized data, and return metrics/times."""
+
+    # setup
+    setup_start = perf_counter()
+    from quadro import QUADROClassifier
+    from threadpoolctl import threadpool_limits
+    quadro = QUADROClassifier(standardize=False, solver=solver)
+    penalty_pairs = [(0., 0.), (.01, .01), (.01, .1), (.1, .1), (.1, 1.)]
+    param_grid = [
+        {'lambda_quadratic': [quadratic], 'lambda_linear': [linear]}
+        for quadratic, linear in penalty_pairs
+    ]
+    scoring = make_scorer(roc_auc_score, response_method="predict_proba")
+    grid_search = GridSearchCV(
+        quadro,
+        param_grid,
+        cv=[(
+            np.arange(len(X_train_sub)),
+            np.arange(len(X_train_sub), len(X_train_sub) + len(X_val)),
+        )],
+        scoring=scoring,
+        n_jobs=1,
+        refit=False,
+        error_score='raise',
+    )
+    setup_time = perf_counter() - setup_start
+
+    with threadpool_limits(limits=1):
+        # tune
+        tune_start = perf_counter()
+        tune_scaler = StandardScaler()
+        X_train_sub_scaled = tune_scaler.fit_transform(X_train_sub)
+        X_val_scaled = tune_scaler.transform(X_val)
+        grid_search.fit(
+            np.vstack((X_train_sub_scaled, X_val_scaled)),
+            np.hstack((y_train_sub, y_val)),
+        )
+        best_lambda_quadratic = grid_search.best_params_['lambda_quadratic']
+        best_lambda_linear = grid_search.best_params_['lambda_linear']
+        tune_time = perf_counter() - tune_start
+
+        # fit
+        fit_start = perf_counter()
+        scaler = StandardScaler()
+        X_train_scaled = scaler.fit_transform(X_train)
+        quadro.set_params(
+            lambda_quadratic=best_lambda_quadratic,
+            lambda_linear=best_lambda_linear,
+        )
+        quadro.fit(X_train_scaled, y_train)
+        fit_time = perf_counter() - fit_start
+
+        # predict
+        predict_start = perf_counter()
+        X_test_scaled = scaler.transform(X_test)
+        # Keep QUADRO's analytic class cutoff and calibrated probabilities.
+        pred = quadro.predict(X_test_scaled)
+        proba = quadro.predict_proba(X_test_scaled)[:, 1]
+        predict_time = perf_counter() - predict_start
+
+        fpr, tpr, _ = roc_curve(y_test, proba)
+        brier = np.mean((proba - y_test) ** 2)
+        return (
+            balanced_accuracy_score(y_test, pred),
+            roc_auc_score(y_test, proba),
+            _class_error(y_test, pred),
+            fpr, tpr, proba, brier,
+            setup_time, tune_time, fit_time, predict_time,
+        )
 
 
 ################################################################################

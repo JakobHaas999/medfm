@@ -33,12 +33,13 @@ catboost_info/
 /io/**/*.warnings.json
 /io/**/*.warnings.log
 /io/**/*.warnings.workers/
-/io/**/worker_download
+/io/**/worker_download/
+/io/**/*.log
+/io/**/*.tmp
 
 # Generated report plots and tables.
 /io/**/plots/
 /io/**/tables/
 
-# Docs for data cleaning
-docs/
+# Data-cleaning notes and predictor lists are tracked.
 tests/

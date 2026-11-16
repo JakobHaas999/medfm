@@ -18,6 +18,7 @@ from .model_definitions import (
     run_xgboost,
     run_catboost,
     run_qda,
+    run_quadro,
     run_tabpfn_v25,
     run_tabpfn_v26,
     run_tabpfn_v3,
@@ -108,6 +109,10 @@ def simulation(n, mu, sigma1, sigma2, df=None, dist="Normal", iter=100, g_seed=2
         'QDA_SetupTime': [], 'QDA_TuneTime': [], 'QDA_FitTime': [], 'QDA_PredictTime': [],
         'QDA_Brier': [], 'QDA_CalSlope': [], 'QDA_CalIntercept': [],
         'QDA_Probas': [],
+        'Quadro_ClassError': [], 'Quadro_AUC': [], 'Quadro_Time': [], 'Quadro_FPR': [], 'Quadro_TPR': [],
+        'Quadro_SetupTime': [], 'Quadro_TuneTime': [], 'Quadro_FitTime': [], 'Quadro_PredictTime': [],
+        'Quadro_Brier': [], 'Quadro_CalSlope': [], 'Quadro_CalIntercept': [],
+        'Quadro_Probas': [],
         'TabPFN_v25_ClassError': [], 'TabPFN_v25_AUC': [], 'TabPFN_v25_Time': [], 'TabPFN_v25_FPR': [], 'TabPFN_v25_TPR': [],
         'TabPFN_v25_SetupTime': [], 'TabPFN_v25_TuneTime': [], 'TabPFN_v25_FitTime': [], 'TabPFN_v25_PredictTime': [],
         'TabPFN_v25_Brier': [], 'TabPFN_v25_CalSlope': [], 'TabPFN_v25_CalIntercept': [],
@@ -207,6 +212,10 @@ def simulation(n, mu, sigma1, sigma2, df=None, dist="Normal", iter=100, g_seed=2
                    X_train, X_test, y_train, y_test,
                    X_train_sub, y_train_sub, X_val, y_val, random_state=i+g_seed)
 
+            _run_and_store(errors, 'Quadro', run_quadro, y_test,
+                   X_train, X_test, y_train, y_test,
+                   X_train_sub, y_train_sub, X_val, y_val, random_state=i+g_seed)
+
             _run_and_store(errors, 'TabPFN_v25', run_tabpfn_v25, y_test,
                    X_train, X_test, y_train, y_test, random_state=i+g_seed)
 
@@ -276,6 +285,10 @@ def evaluate_on_sim_data(n, mu, sigma1, sigma2, df=None, dist="Normal", iter=100
         'QDA_SetupTime': [], 'QDA_TuneTime': [], 'QDA_FitTime': [], 'QDA_PredictTime': [],
         'QDA_Brier': [], 'QDA_CalSlope': [], 'QDA_CalIntercept': [],
         'QDA_Probas': [],
+        'Quadro_ClassError': [], 'Quadro_AUC': [], 'Quadro_Time': [], 'Quadro_FPR': [], 'Quadro_TPR': [],
+        'Quadro_SetupTime': [], 'Quadro_TuneTime': [], 'Quadro_FitTime': [], 'Quadro_PredictTime': [],
+        'Quadro_Brier': [], 'Quadro_CalSlope': [], 'Quadro_CalIntercept': [],
+        'Quadro_Probas': [],
         'TabPFN_v25_ClassError': [], 'TabPFN_v25_AUC': [], 'TabPFN_v25_Time': [], 'TabPFN_v25_FPR': [], 'TabPFN_v25_TPR': [],
         'TabPFN_v25_SetupTime': [], 'TabPFN_v25_TuneTime': [], 'TabPFN_v25_FitTime': [], 'TabPFN_v25_PredictTime': [],
         'TabPFN_v25_Brier': [], 'TabPFN_v25_CalSlope': [], 'TabPFN_v25_CalIntercept': [],
@@ -338,6 +351,7 @@ def evaluate_on_sim_data(n, mu, sigma1, sigma2, df=None, dist="Normal", iter=100
                 ('XGBoost', 'XGBoost_'),
                 ('CatBoost', 'CatBoost_'),
                 ('QDA', 'QDA_'),
+                ('Quadro', 'Quadro_'),
                 ('TabPFN_v25', 'TabPFN_v25_'),
                 ('TabPFN_v26', 'TabPFN_v26_'),
                 ('TabPFN_v3', 'TabPFN_v3_'),
@@ -437,6 +451,11 @@ def _single_sim_iteration(i, n1_tr, n2_tr, n1_te, n2_te, mu1, mu2,
             random_state=i+g_seed),
         'QDA': _run_and_pack(
             run_qda, y_test,
+            X_train, X_test, y_train, y_test,
+            X_train_sub, y_train_sub, X_val, y_val,
+            random_state=i+g_seed),
+        'Quadro': _run_and_pack(
+            run_quadro, y_test,
             X_train, X_test, y_train, y_test,
             X_train_sub, y_train_sub, X_val, y_val,
             random_state=i+g_seed),

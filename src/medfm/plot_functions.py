@@ -6,8 +6,9 @@ import pandas as pd
 
 
 # All plots use this order. Baseline methods come first, then tree ensembles,
-# then foundation models. QDA is the baseline quadratic classifier.
-BASELINE_METHODS = ['L-SLR', 'SLR', 'QDA']
+# then foundation models. QDA and QUADRO are baseline quadratic classifiers,
+# not tree models.
+BASELINE_METHODS = ['L-SLR', 'SLR', 'QDA', 'Quadro']
 TREE_METHODS = ['RandomForest', 'XGBoost', 'CatBoost']
 TABPFN_METHODS = ['TabPFN_v25', 'TabPFN_v26', 'TabPFN_v3', 'TabPFN_v35']
 FOUNDATION_METHODS = TABPFN_METHODS + ['EXAONE', 'TabICL-V1', 'TabICL-V2']
@@ -29,6 +30,7 @@ COLOR_SCHEME = {
     'L-SLR':        '#D27C20',
     'SLR':          '#9F4F0B',
     'QDA':          '#D95F59',
+    'Quadro':       '#9E292F',
     'RandomForest': '#6F9E4B',
     'XGBoost':      '#4F7F35',
     'CatBoost':     '#2F5E22',
@@ -49,6 +51,7 @@ LINE_STYLES = {
     'XGBoost':      '--',
     'CatBoost':     ':',
     'QDA':          '-',
+    'Quadro':       '--',
     'TabPFN_v25':   '-',
     'TabPFN_v26':   '--',
     'TabPFN_v3':    '-.',
@@ -60,6 +63,7 @@ LINE_STYLES = {
 
 # Only display labels change; saved result column names stay the same.
 DISPLAY_NAMES = {
+    'Quadro': 'QUADRO',
     'TabICL-V1': 'TabICL v1', 'TabICL-V2': 'TabICL v2',
     'TabPFN_v25': 'TabPFN 2.5', 'TabPFN_v26': 'TabPFN 2.6',
     'TabPFN_v3': 'TabPFN 3', 'TabPFN_v35': 'TabPFN 3.5',

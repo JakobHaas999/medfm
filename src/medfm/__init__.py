@@ -12,6 +12,7 @@ from .model_definitions import (
     run_xgboost,
     run_catboost,
     run_qda,
+    run_quadro,
     run_tabpfn_v25,
     run_tabpfn_v26,
     run_tabpfn_v3,
