@@ -115,7 +115,7 @@ resampling. Each option accepts one or more space-separated values:
 **`FileNotFoundError` for a TabPFN checkpoint during a parallel run** First run one repetition with a single worker to download and verify the models:
 
 ```bash
-uv run --locked python scripts/run_analysis.py sensitivity --settings 1 --repetitions 1 --jobs 1 --output io/sim_results/worker_download
+uv run --locked python scripts/run_analysis.py simulation --settings 1 --repetitions 1 --jobs 1 --output io/sim_results/worker_download
 ```
 
 After it succeeds, retry.
