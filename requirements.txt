@@ -1,0 +1,2 @@
+# Compatibility for pip users. Maintain dependencies in pyproject.toml.
+# For reproducible installs, use 'uv sync'. Look at README.md file.
