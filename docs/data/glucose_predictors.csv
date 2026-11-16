@@ -1,0 +1,26 @@
+COLUMN,Description,decision,available,why
+,,,,
+Common to glucose_insulin_ICU.csv and glucose_insulin_pair.csv,,,,
+SUBJECT_ID,Patient identifier,remove,before prediction,"Identifier, not a feature."
+HADM_ID,hospital admission id,remove,before prediction,"Identifier, not a feature."
+ICUSTAY_ID,ICU admission id,remove,before prediction,"Identifier, not a feature."
+LOS_ICU_days,Length of stay in days,remove,after prediction,Post-hoc; known only at discharge.
+first_ICU_stay,First ICU admission for a hospital admission,keep,before prediction,Routine variable at the insulin event.
+TIMER,Event-ordering timestamp,remove,before prediction,Not a feature. Orders glucose and insulin events.
+STARTTIME,Insulin start timestamp,remove,before prediction,"Not a feature. Orders events and requires GLCTIMER_AL < STARTTIME."
+INPUT,Dose for a single insulin bolus (U),keep,before prediction,"Bolus dose; 0 for infusions, where INPUT is rate x duration and therefore future information."
+INPUT_HRS,Insulin infusion rate (U/hr),keep,before prediction,"Infusion rate; 0 for boluses, where the field is structurally absent (genuine NaN stays missing)."
+ENDTIME,Insulin end timestamp,remove,before prediction,"Not a feature. Anchors the follow-up reading after the input stops or the rate changes."
+INSULINTYPE,Insulin acting type (short/intermediate/long),keep,before prediction,Routine variable at the insulin event.
+EVENT,Insulin route (BOLUS_INYECTION/BOLUS_PUSH/INFUSION),keep,before prediction,Routine variable at the insulin event.
+INFXSTOP,Infusion discontinued (1 = stopped),remove,before prediction,Leaks the later glucose outcome.
+GLCTIMER,Glucose measurement timestamp,remove,after prediction,"Not a feature. Identifies the next reading after ENDTIME."
+GLC,Glycemia value (mg/dL),target,after prediction,Next reading after ENDTIME; 1 if 70-180 mg/dL (TIR).
+GLCSOURCE,Reading method (FINGERSTICK/BLOOD),remove,before prediction,Mostly missing and constant on insulin rows.
+,,,,
+Specific to glucose_insulin_pair.csv,,,,
+GLCTIMER_AL,Paired glucose timestamp,remove,before prediction,"Not a feature. Requires the paired reading to precede STARTTIME."
+GLC_AL,Paired glucose value (mg/dL),keep,before prediction,"Pre-insulin glucose; used only when GLCTIMER_AL < STARTTIME."
+GLCSOURCE_AL,Reading method of the paired glucose,remove,before prediction,Curation provenance; not clinical.
+RULE,Pairing rule (1-4),remove,before prediction,Rules 2-4 can select a reading after the insulin event.
+Repeated,Whether this reading was paired with an insulin input,remove,before prediction,Not a feature.

@@ -1,0 +1,38 @@
+COLUMN,Description,decision,available,why
+subject_id,Patient identifier,remove,before prediction,"Identifier, not a feature"
+hadm_id,hospital admission id,remove,before prediction,"Identifier, not a feature"
+status,Patient status (inpatient/outpatient),keep,before prediction,Routine pre-echo clinical variable
+height_in,Height (inches),keep,before prediction,Routine pre-echo clinical variable
+weight_lb,Weight (pounds),keep,before prediction,Routine pre-echo clinical variable
+heart_rate_bpm,Heart rate (bpm),keep,before prediction,Routine pre-echo clinical variable
+sbp_mmhg,Systolic blood pressure (mmHg),keep,before prediction,Routine pre-echo clinical variable
+dbp_mmhg,Diastolic blood pressure (mmHg),keep,before prediction,Routine pre-echo clinical variable
+BSA_m2,Body surface area (m2),keep,before prediction,Routine pre-echo clinical variable
+row_id,echocardiogram report id,remove,after the echo,"Identifier, not a feature"
+category,clinical note type,remove,after the echo,Note metadata; not a pre-echo predictor.
+text,raw clinical note text,remove,after the echo,Contains the phrases used to derive LV_systolic.
+chartdate,clinical note charted date,remove,after the echo,Not a feature.
+date_time,clinical note charted date and time,remove,after the echo,Not a feature.
+LA_cavity,left atrium cavity,remove,after the echo,Echo finding; target leakage.
+RA_dilated,right atrium dilated,remove,after the echo,Echo finding; target leakage.
+LV_systolic,left ventricle systolic,target,after the echo,"Normal (0) vs abnormal (-2, -1, 1, 2, or 3). -3 (inadequate to evaluate), -50 (conflicting statements), and missing values are excluded. Dataset DOI 10.13026/xhrz-ht59; clinical importance DOI 10.1186/2110-5820-1-6."
+LV_cavity,left ventricle cavity,remove,after the echo,Echo finding; target leakage.
+LV_wall,left ventricle wall,remove,after the echo,Echo finding; target leakage.
+RV_cavity,right ventricle cavity,remove,after the echo,Echo finding; target leakage.
+RV_systolic,right ventricle systolic,remove,after the echo,Echo finding; target leakage.
+AV_stenosis,aortic valve stenosis,remove,after the echo,Echo finding; target leakage.
+MV_stenosis,mitral valve stenosis,remove,after the echo,Echo finding; target leakage.
+TV_regurgitation,tricuspid valve regurgitation,remove,after the echo,Echo finding; target leakage.
+TV_stenosis,tricuspid valve stenosis,remove,after the echo,Echo finding; target leakage.
+TV_pulm_htn,tricuspid valve pulmonary hypertension,remove,after the echo,Echo finding; target leakage.
+AV_regurgitation,aortic valve regurgitation,remove,after the echo,Echo finding; target leakage.
+MV_regurgitation,mitral valve regurgitation,remove,after the echo,Echo finding; target leakage.
+RA_pressure,right atrium pressure,remove,after the echo,Echo finding; target leakage.
+LV_diastolic,left ventricle diastolic,remove,after the echo,Echo finding; target leakage.
+RV_volume_overload,right ventricle volume overload,remove,after the echo,Echo finding; target leakage.
+RV_wall,right ventricle wall,remove,after the echo,Echo finding; target leakage.
+RV_pressure_overload,right ventricle pressure overload,remove,after the echo,Echo finding; target leakage.
+technical_quality,Image quality,remove,after the echo,Not in PhysioNet description; not a predictor.
+contrast,Contrast agent used,remove,after the echo,Not in PhysioNet description; not a predictor.
+test,Echocardiogram type/protocol,remove,after the echo,Not in PhysioNet description; not a predictor.
+doppler,Doppler mode,remove,after the echo,Not in PhysioNet description; not a predictor.

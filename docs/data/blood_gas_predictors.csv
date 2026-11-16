@@ -1,0 +1,143 @@
+COLUMN,Description,decision,available,why
+admission_age,admission age (years),keep,before prediction,Routine clinical variable
+sex_female,female sex (0/1),keep,before prediction,Routine clinical variable
+weight_admission,weight on admission,keep,before prediction,Routine clinical variable
+height_admission,height on admission,keep,before prediction,Routine clinical variable
+BMI_admission,BMI on admission,keep,before prediction,Routine clinical variable
+comorbidity_score_value,comorbidity score value,keep,before prediction,Score type differs by source_db (Elixhauser vs Charlson).
+SpO2,pulse-oximetry oxygen saturation (%),keep,before prediction,not from the ABG.
+delta_SpO2,Minutes since last SpO2 measurement,keep,before prediction,not from the ABG.
+delta_vitals_heart_rate,Minutes since last measurement: vital sign,keep,before prediction,Routine clinical variable
+vitals_heart_rate,vital sign,keep,before prediction,Routine clinical variable
+delta_vitals_resp_rate,,keep,before prediction,Routine clinical variable
+vitals_resp_rate,,keep,before prediction,Routine clinical variable
+delta_vitals_mbp_ni,,keep,before prediction,Routine clinical variable
+vitals_mbp_ni,,keep,before prediction,Routine clinical variable
+delta_vitals_sbp_ni,,keep,before prediction,Routine clinical variable
+vitals_sbp_ni,,keep,before prediction,Routine clinical variable
+delta_vitals_dbp_ni,,keep,before prediction,Routine clinical variable
+vitals_dbp_ni,,keep,before prediction,Routine clinical variable
+delta_vitals_mbp_i,,keep,before prediction,Routine clinical variable
+vitals_mbp_i,,keep,before prediction,Routine clinical variable
+delta_vitals_sbp_i,,keep,before prediction,Routine clinical variable
+vitals_sbp_i,,keep,before prediction,Routine clinical variable
+delta_vitals_dbp_i,,keep,before prediction,Routine clinical variable
+vitals_dbp_i,,keep,before prediction,Routine clinical variable
+delta_vitals_tempc,,keep,before prediction,Routine clinical variable
+vitals_tempc,,keep,before prediction,Routine clinical variable
+delta_cbc_hemoglobin,Minutes since last measurement: CBC lab,keep,before prediction,Routine clinical variable
+cbc_hemoglobin,CBC lab,keep,before prediction,Routine clinical variable
+delta_cbc_hematocrit,,keep,before prediction,Routine clinical variable
+cbc_hematocrit,,keep,before prediction,Routine clinical variable
+delta_cbc_mch,,keep,before prediction,Routine clinical variable
+cbc_mch,,keep,before prediction,Routine clinical variable
+delta_cbc_mchc,,keep,before prediction,Routine clinical variable
+cbc_mchc,,keep,before prediction,Routine clinical variable
+delta_cbc_mcv,,keep,before prediction,Routine clinical variable
+cbc_mcv,,keep,before prediction,Routine clinical variable
+delta_cbc_platelet,,keep,before prediction,Routine clinical variable
+cbc_platelet,,keep,before prediction,Routine clinical variable
+delta_cbc_rbc,,keep,before prediction,Routine clinical variable
+cbc_rbc,,keep,before prediction,Routine clinical variable
+delta_cbc_rdw,,keep,before prediction,Routine clinical variable
+cbc_rdw,,keep,before prediction,Routine clinical variable
+delta_cbc_wbc,,keep,before prediction,Routine clinical variable
+cbc_wbc,,keep,before prediction,Routine clinical variable
+delta_coag_fibrinogen,Minutes since last measurement: coagulation lab,keep,before prediction,Routine clinical variable
+coag_fibrinogen,coagulation lab,keep,before prediction,Routine clinical variable
+delta_coag_inr,,keep,before prediction,Routine clinical variable
+coag_inr,,keep,before prediction,Routine clinical variable
+delta_coag_pt,,keep,before prediction,Routine clinical variable
+coag_pt,,keep,before prediction,Routine clinical variable
+delta_coag_ptt,,keep,before prediction,Routine clinical variable
+coag_ptt,,keep,before prediction,Routine clinical variable
+delta_bmp_sodium,Minutes since last measurement: basic metabolic panel,keep,before prediction,Routine clinical variable
+bmp_sodium,basic metabolic panel,keep,before prediction,Routine clinical variable
+delta_bmp_potassium,,keep,before prediction,Routine clinical variable
+bmp_potassium,,keep,before prediction,Routine clinical variable
+delta_bmp_chloride,,keep,before prediction,Routine clinical variable
+bmp_chloride,,keep,before prediction,Routine clinical variable
+delta_bmp_bicarbonate,,keep,before prediction,Routine clinical variable
+bmp_bicarbonate,,keep,before prediction,Routine clinical variable
+delta_bmp_bun,,keep,before prediction,Routine clinical variable
+bmp_bun,,keep,before prediction,Routine clinical variable
+delta_bmp_creatinine,,keep,before prediction,Routine clinical variable
+bmp_creatinine,,keep,before prediction,Routine clinical variable
+delta_bmp_glucose,,keep,before prediction,Routine clinical variable
+bmp_glucose,,keep,before prediction,Routine clinical variable
+delta_bmp_aniongap,,keep,before prediction,Routine clinical variable
+bmp_aniongap,,keep,before prediction,Routine clinical variable
+delta_bmp_calcium,,keep,before prediction,Routine clinical variable
+bmp_calcium,,keep,before prediction,Routine clinical variable
+delta_bmp_lactate,,keep,before prediction,Routine clinical variable
+bmp_lactate,,keep,before prediction,Routine clinical variable
+delta_hfp_alt,,keep,before prediction,Routine clinical variable
+hfp_alt,,keep,before prediction,Routine clinical variable
+delta_hfp_alp,,keep,before prediction,Routine clinical variable
+hfp_alp,,keep,before prediction,Routine clinical variable
+delta_hfp_ast,,keep,before prediction,Routine clinical variable
+hfp_ast,,keep,before prediction,Routine clinical variable
+delta_hfp_bilirubin_total,,keep,before prediction,Routine clinical variable
+hfp_bilirubin_total,,keep,before prediction,Routine clinical variable
+delta_hfp_bilirubin_direct,,keep,before prediction,Routine clinical variable
+hfp_bilirubin_direct,,keep,before prediction,Routine clinical variable
+delta_hfp_albumin,,keep,before prediction,Routine clinical variable
+hfp_albumin,,keep,before prediction,Routine clinical variable
+delta_others_ck_cpk,Minutes since last measurement: other lab,keep,before prediction,Routine clinical variable
+others_ck_cpk,other lab,keep,before prediction,Routine clinical variable
+delta_others_ck_mb,,keep,before prediction,Routine clinical variable
+others_ck_mb,,keep,before prediction,Routine clinical variable
+delta_others_ld_ldh,,keep,before prediction,Routine clinical variable
+others_ld_ldh,,keep,before prediction,Routine clinical variable
+delta_sofa_past_overall_24hr,Time offset of hour-before-ABG SOFA component (minutes),keep,before prediction,Routine clinical variable
+sofa_past_overall_24hr,SOFA component in hour before ABG,keep,before prediction,Routine clinical variable
+delta_sofa_past_coagulation_24hr,,keep,before prediction,Routine clinical variable
+sofa_past_coagulation_24hr,,keep,before prediction,Routine clinical variable
+delta_sofa_past_liver_24hr,,keep,before prediction,Routine clinical variable
+sofa_past_liver_24hr,,keep,before prediction,Routine clinical variable
+delta_sofa_past_cardiovascular_24hr,,keep,before prediction,Routine clinical variable
+sofa_past_cardiovascular_24hr,,keep,before prediction,Routine clinical variable
+delta_sofa_past_cns_24hr,,keep,before prediction,Routine clinical variable
+sofa_past_cns_24hr,,keep,before prediction,Routine clinical variable
+delta_sofa_past_renal_24hr,,keep,before prediction,Routine clinical variable
+sofa_past_renal_24hr,,keep,before prediction,Routine clinical variable
+delta_sofa_future_overall_24hr,Time offset to 24h-after-ABG SOFA component (minutes; future),remove,after prediction,Future metadata and direct leakage.
+delta_sofa_future_coagulation_24hr,Time offset to 24h-after-ABG SOFA component (minutes; future),remove,after prediction,Future metadata and direct leakage.
+delta_sofa_future_liver_24hr,Time offset to 24h-after-ABG SOFA component (minutes; future),remove,after prediction,Future metadata and direct leakage.
+delta_sofa_future_cardiovascular_24hr,Time offset to 24h-after-ABG SOFA component (minutes; future),remove,after prediction,Future metadata and direct leakage.
+delta_sofa_future_cns_24hr,Time offset to 24h-after-ABG SOFA component (minutes; future),remove,after prediction,Future metadata and direct leakage.
+delta_sofa_future_renal_24hr,Time offset to 24h-after-ABG SOFA component (minutes; future),remove,after prediction,Future metadata and direct leakage.
+source_db,Source database (eICU/MIMIC-III/MIMIC-IV),keep,before prediction,Dataset source; may capture center effects.
+numbedscategory,Hospital bed-count category,keep,before prediction,Hospital characteristic.
+region,US region,keep,before prediction,Hospital characteristic.
+comorbidity_score_name,Comorbidity score type (Elixhauser/Charlson),keep,before prediction,Differs by source_db.
+race_ethnicity,Race/ethnicity category,keep,before prediction,Demographic variable.
+SaO2,Arterial oxygen saturation from ABG (%),target,after prediction,"Target: hypoxemia, SaO2 < 88% (DOI 10.48550/arXiv.2408.04396). Hidden hypoxemia (SaO2 < 88% while SpO2 >= 88%) is only an ad-hoc subgroup, not the target."
+unique_subject_id,Patient identifier,remove,before prediction,"Identifier, not a feature."
+unique_hospital_admission_id,Admission identifier,remove,before prediction,"Identifier, not a feature."
+unique_icustay_id,ICU stay identifier,remove,before prediction,"Identifier, not a feature."
+subject_id,Original patient id,remove,before prediction,"Identifier, not a feature."
+hospital_admission_id,Original admission id,remove,before prediction,"Identifier, not a feature."
+icustay_id,Original ICU stay id,remove,before prediction,"Identifier, not a feature."
+hospitalid,Hospital identifier,remove,before prediction,"Identifier, not a feature."
+teachingstatus,Teaching-hospital flag,keep,before prediction,Hospital characteristic.
+datetime_hospital_admit,Timestamp,remove,before prediction,Not a feature
+datetime_hospital_discharge,Timestamp,remove,before prediction,Not a feature
+datetime_icu_admit,Timestamp,remove,before prediction,Not a feature
+datetime_icu_discharge,Timestamp,remove,before prediction,Not a feature
+los_hospital,Hospital length of stay,remove,after prediction,Post-outcome.
+los_ICU,ICU length of stay,remove,after prediction,Post-outcome.
+in_hospital_mortality,In-hospital mortality,remove,after prediction,Post-outcome.
+SaO2_timestamp,SaO2 timestamp,remove,after prediction,Not a feature. Defines the target window.
+pH,ABG pH,remove,after prediction,Concurrent with the target; not available before prediction.
+pCO2,ABG pCO2 (mmHg),remove,after prediction,Concurrent with the target; not available before prediction.
+pO2,ABG pO2 (mmHg),remove,after prediction,Concurrent with the target; not available before prediction.
+Carboxyhemoglobin,ABG carboxyhemoglobin (%),remove,after prediction,Concurrent with the target; not available before prediction.
+Methemoglobin,ABG methemoglobin (%),remove,after prediction,Concurrent with the target; not available before prediction.
+SpO2_timestamp,SpO2 timestamp,remove,before prediction,Not a feature. Defines the SpO2 window.
+sofa_future_overall_24hr,24h-after-ABG SOFA score,remove,after prediction,Future information.
+sofa_future_coagulation_24hr,24h-after-ABG SOFA score,remove,after prediction,Future information.
+sofa_future_liver_24hr,24h-after-ABG SOFA score,remove,after prediction,Future information.
+sofa_future_cardiovascular_24hr,24h-after-ABG SOFA score,remove,after prediction,Future information.
+sofa_future_cns_24hr,24h-after-ABG SOFA score,remove,after prediction,Future information.
+sofa_future_renal_24hr,24h-after-ABG SOFA score,remove,after prediction,Future information.
