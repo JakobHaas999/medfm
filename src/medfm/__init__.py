@@ -32,10 +32,12 @@ from .table_functions import (
     build_measures_table, 
     build_gain_table,
     build_best_methods_table,
-    build_effect_table
+    build_effect_table,
+    build_effect_samples
 )
 from .plot_functions import (
     plot_roc_curves_grid,
     plot_boxplots_grid,
+    plot_violin_grid,
     plot_runtime_barplot_simple
 )

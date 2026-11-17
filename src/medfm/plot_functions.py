@@ -1,13 +1,14 @@
 import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch, Rectangle
 from pathlib import Path
 import numpy as np
 import pandas as pd
 
 
-# All plots use this order. Baseline methods come first, then tree ensembles,
-# then foundation models. QDA and QUADRO are baseline quadratic classifiers,
-# not tree models.
+# All plots use this order. Baseline methods come first, then tree ensemble
+# methods, then foundation models. QDA and QUADRO are baseline quadratic
+# classifiers, not tree models.
 BASELINE_METHODS = ['L-SLR', 'SLR', 'QDA', 'Quadro']
 TREE_METHODS = ['RandomForest', 'XGBoost', 'CatBoost']
 TABPFN_METHODS = ['TabPFN_v25', 'TabPFN_v26', 'TabPFN_v3', 'TabPFN_v35']
@@ -16,14 +17,22 @@ FOUNDATION_METHODS = TABPFN_METHODS + ['EXAONE', 'TabICL-V1', 'TabICL-V2']
 CLASSICAL_METHODS = BASELINE_METHODS + TREE_METHODS
 METHOD_ORDER = BASELINE_METHODS + TREE_METHODS + FOUNDATION_METHODS
 
+# One canonical spelling for the three method families. Every plot title,
+# legend title, table group and heatmap header uses these full names.
+GROUP_LABELS = {
+    'baseline': 'Baseline methods',
+    'tree': 'Tree ensemble methods',
+    'foundation': 'Foundation models',
+}
+
 # Metrics where a larger value is better. Every other metric is lower-is-better.
 HIGHER_IS_BETTER = {'AUC'}
 
 # Group decorations: title, member methods, background, border.
 GROUPS = [
-    ('Baseline methods', BASELINE_METHODS, '#faf7f3', '#9F4F0B'),
-    ('Tree ensembles', TREE_METHODS, '#f3faf2', '#3F6B3A'),
-    ('Foundation models', FOUNDATION_METHODS, '#f3f7fb', '#1B5E9A'),
+    (GROUP_LABELS['baseline'], BASELINE_METHODS, '#faf7f3', '#9F4F0B'),
+    (GROUP_LABELS['tree'], TREE_METHODS, '#f3faf2', '#3F6B3A'),
+    (GROUP_LABELS['foundation'], FOUNDATION_METHODS, '#f3f7fb', '#1B5E9A'),
 ]
 
 COLOR_SCHEME = {
@@ -38,9 +47,12 @@ COLOR_SCHEME = {
     'TabPFN_v26':   '#397FBA',
     'TabPFN_v3':    '#1B5E9A',
     'TabPFN_v35':   '#08386B',
-    'EXAONE':       '#168B8A',
-    'TabICL-V1':    '#9B8AC4',
-    'TabICL-V2':    '#7564A8',
+    # EXAONE keeps the former TabICL purple range; TabICL uses the former
+    # EXAONE teal range. The swap is global so every plot agrees, and it keeps
+    # the two foundation-family half violins in the forest plot distinct.
+    'EXAONE':       '#7564A8',
+    'TabICL-V1':    '#168B8A',
+    'TabICL-V2':    '#0E6C6B',
 }
 
 # Line styles distinguish related methods when their curves overlap.
@@ -72,6 +84,44 @@ DISPLAY_NAMES = {
 # Each group legend is wrapped so it is at most this many rows tall. Keeping
 # the legends short stops the three boxes from running past the figure edges.
 LEGEND_MAX_ROWS = 3
+
+# Fallback colours for forest-plot comparison methods that are not in the
+# main colour scheme. Known methods reuse their colour from every other plot,
+# so a legend entry such as "TabPFN 3.5 vs best tree" always means the same
+# method here as it does in the box and ROC plots.
+COMPARISON_COLORS = ['#1B5E9A', '#D95F59']
+
+# The forest comparison uses the same palette as every other plot. Keyed by
+# method family rather than rank, so a method keeps its colour when it moves
+# between first and second place. The darkest TabPFN blue and the teal assigned
+# to TabICL above give the two half violins enough separation.
+FOREST_COLORS = {
+    'TabPFN': COLOR_SCHEME['TabPFN_v35'],
+    'TabICL': COLOR_SCHEME['TabICL-V1'],
+}
+
+
+def _forest_color(method, index=None):
+    """High-contrast forest colour, still tied to the method rather than rank."""
+    for prefix, color in FOREST_COLORS.items():
+        if str(method).startswith(prefix):
+            return color
+    return _comparison_color(method, index)
+
+
+def _comparison_color(method, index=None):
+    """Colour one comparison by its foundation method, with a fallback.
+
+    Known methods always reuse their colour from the other plots. An unknown
+    method uses a stable fallback index derived from the method order, never
+    the rank it happens to hold in one setting.
+    """
+    if method in COLOR_SCHEME:
+        return COLOR_SCHEME[method]
+    if index is None:
+        index = (FOUNDATION_METHODS.index(method)
+                 if method in FOUNDATION_METHODS else 0)
+    return COMPARISON_COLORS[index % len(COMPARISON_COLORS)]
 
 
 def _setting_filename(save_path, setting, multiple):
@@ -202,6 +252,24 @@ def _title(setting, labels):
     return labels.get(str(setting), str(setting)) if labels else str(setting)
 
 
+def _bayes_auc_reference(ax, setting, metric, bayes_auc, show):
+    """Draw the population AUC reference; its label lives in the legend.
+
+    The reference is a population value, not a fitted model. Keeping its label
+    out of the plotting area leaves the distributions uncluttered.
+    """
+    if str(metric).upper() != 'AUC' or not show or not bayes_auc:
+        return
+    if setting not in bayes_auc:
+        return
+
+    reference = bayes_auc[setting]
+    value = reference['auc']
+    prefix = 'Bayes AUC ≈' if reference.get('mc_se', 0) > 0 else 'Bayes AUC ='
+    ax.axhline(value, color='black', linestyle='--', linewidth=1.3,
+               label=f'{prefix} {value:.3f}', zorder=4)
+
+
 # ─────────────────────────────────────────────────────────────────────
 # ROC curves
 # ─────────────────────────────────────────────────────────────────────
@@ -319,18 +387,12 @@ def plot_boxplots_grid(errors_dict, settings_to_show, metric='ClassError', label
             patch.set_alpha(0.7)
 
         # A population reference, not another fitted model or another box.
-        if metric.upper() == 'AUC' and show_bayes_auc and bayes_auc and setting in bayes_auc:
-            reference = bayes_auc[setting]
-            value = reference['auc']
-            prefix = 'Bayes AUC ≈' if reference.get('mc_se', 0) > 0 else 'Bayes AUC ='
-            ax.axhline(value, color='black', linestyle='--', linewidth=1.3,
-                       label=f'{prefix} {value:.3f}', zorder=4)
-            # Place the label just above the line, aligned to the right edge.
-            ax.annotate(f'{prefix} {value:.3f}', xy=(0.99, value),
-                        xycoords=ax.get_yaxis_transform(), xytext=(0, 9),
-                        textcoords='offset points', ha='right', va='bottom',
-                        fontsize=9, bbox=dict(facecolor='white', edgecolor='none', alpha=0.8),
-                        zorder=5)
+        _bayes_auc_reference(ax, setting, metric, bayes_auc, show_bayes_auc)
+        reference_lines = [line for line in ax.lines
+                           if line.get_label().startswith('Bayes AUC')]
+        if reference_lines:
+            ax.legend(handles=reference_lines, loc='lower right', fontsize=9,
+                      frameon=True, framealpha=1)
 
         ax.set_xticks(positions)
         ax.set_xticklabels(xtick_labels, rotation=25, ha='right', fontsize=11)
@@ -350,17 +412,118 @@ def plot_boxplots_grid(errors_dict, settings_to_show, metric='ClassError', label
 
 
 # ─────────────────────────────────────────────────────────────────────
+# Violin plots (AUC only)
+# ─────────────────────────────────────────────────────────────────────
+def plot_violin_grid(errors_dict, settings_to_show, metric='AUC', labels=None,
+                     dir=None, figsize=(12, 10), save_path=None, *, group_frames=False,
+                     bayes_auc=None, show_bayes_auc=True):
+    """AUC violin-and-box comparison, one figure per setting.
+
+    Each method gets a full vertical violin in its group colour with a compact
+    black boxplot inside it, following the box+violin idea without adding raw
+    scatter points or a separate mean line. The line inside the inner box is the
+    median. Only AUC is drawn: pass another metric and the function skips with a
+    warning.
+
+    With several settings, ``save_path`` gets the setting name added before the
+    suffix (``auc_violin.png`` -> ``auc_violin_setting1.png``).
+    """
+    if str(metric).upper() != 'AUC':
+        print(f'⚠️ violin plots are only produced for AUC — skipping {metric}')
+        return
+
+    multiple = len(settings_to_show) > 1
+
+    for setting in settings_to_show:
+        df = errors_dict[setting]
+        fig, ax = plt.subplots(figsize=figsize)
+
+        data_to_plot, colors, shown_methods = [], [], []
+        for model in METHOD_ORDER:
+            column = f'{model}_{metric}'
+            if column not in df.columns:
+                continue
+            values = pd.to_numeric(df[column], errors='coerce')
+            values = values.replace([np.inf, -np.inf], np.nan).dropna()
+            if values.empty:
+                continue
+            data_to_plot.append(values.to_numpy())
+            colors.append(COLOR_SCHEME[model])
+            shown_methods.append(model)
+
+        if not shown_methods:
+            plt.close(fig)
+            continue
+
+        positions = _grouped_axis(ax, shown_methods,
+                                  style='frames' if group_frames else 'shaded')
+        parts = ax.violinplot(
+            data_to_plot, positions=positions, widths=0.6, points=100,
+            showmeans=False, showmedians=False, showextrema=False,
+        )
+        for body, color in zip(parts['bodies'], colors):
+            body.set_facecolor(color)
+            body.set_edgecolor(color)
+            body.set_alpha(0.7)
+            body.set_zorder(2)
+
+        # A narrow, unfilled boxplot inside each violin adds the quartiles and
+        # median without hiding the density or adding a scatter layer.
+        box = ax.boxplot(
+            data_to_plot, positions=positions, widths=0.22, patch_artist=True,
+            showmeans=False, showfliers=False, manage_ticks=False,
+            boxprops=dict(facecolor='none', edgecolor='black', linewidth=1.2),
+            whiskerprops=dict(color='black', linewidth=1.0),
+            capprops=dict(color='black', linewidth=1.0),
+            medianprops=dict(color='black', linewidth=1.2),
+        )
+        for patch in box['boxes']:
+            patch.set_facecolor('none')
+            patch.set_edgecolor('black')
+            patch.set_zorder(3)
+        for key in ('whiskers', 'caps', 'medians'):
+            for item in box[key]:
+                item.set_zorder(4)
+
+        _bayes_auc_reference(ax, setting, metric, bayes_auc, show_bayes_auc)
+
+        ax.set_xticks(positions)
+        ax.set_xticklabels([DISPLAY_NAMES.get(model, model) for model in shown_methods],
+                           rotation=25, ha='right', fontsize=11)
+        ax.set_ylabel(metric, fontsize=12)
+        ax.set_title(_title(setting, labels), fontsize=12, pad=14 if group_frames else 30)
+        ax.grid(axis='y', alpha=0.3)
+
+        handles = [line for line in ax.lines
+                   if line.get_label().startswith('Bayes AUC')]
+        if handles:
+            ax.legend(handles=handles, loc='lower right', fontsize=11,
+                      bbox_to_anchor=(0.98, 0.03), borderaxespad=0.0,
+                      frameon=True, framealpha=1)
+
+        if group_frames:
+            _pad_group_frames(ax)
+
+        fig.tight_layout()
+        _save_figure(fig, dir, _setting_filename(save_path, setting, multiple))
+        if plt.get_backend().lower() != 'agg':
+            plt.show()
+
+
+# ─────────────────────────────────────────────────────────────────────
 # Runtime barplot (stacked by phase)
 # ─────────────────────────────────────────────────────────────────────
 # Each bar is split into the runner's timing phases. "Other" is the part of
 # the total wall-clock time not covered by the four measured phases (for
-# example the ROC/Brier computation after prediction).
+# example the ROC/Brier computation after prediction). Use a colour-blind safe
+# palette with a distinct hue per phase; shades of one blue are hard to tell
+# apart once the bars are stacked.
 TIME_PHASES = [
-    ('SetupTime', 'Setup', '#c9d9ea'),
-    ('TuneTime', 'Tune', '#8fb3d9'),
-    ('FitTime', 'Fit', '#4f86c6'),
-    ('PredictTime', 'Predict', '#1f4e79'),
-    ('Other', 'Other', '#b8b8b8'),
+    ('SetupTime', 'Setup', '#56B4E9'),
+    ('TuneTime', 'Tune', '#E69F00'),
+    ('FitTime', 'Fit', '#009E73'),
+    ('PredictTime', 'Predict', '#CC79A7'),
+    ('Other', 'Other', '#999999'),
 ]
 _TIME_KEYS = ['SetupTime', 'TuneTime', 'FitTime', 'PredictTime']
 
@@ -403,7 +566,7 @@ def plot_runtime_barplot_simple(errors_dict, settings_to_show, labels=None,
         bottoms += heights
 
     for i, total in enumerate(bottoms):
-        ax.text(x[i], total, f'{total:.2f}s', ha='center', va='bottom',
+        ax.text(x[i], total, f'{total:.0f}s', ha='center', va='bottom',
                 fontsize=10, fontweight='bold')
 
     ax.set_xticks(x)
@@ -425,21 +588,43 @@ def plot_runtime_barplot_simple(errors_dict, settings_to_show, labels=None,
 # ─────────────────────────────────────────────────────────────────────
 # Forest plot of the best-vs-best (foundation minus tree) effect
 # ─────────────────────────────────────────────────────────────────────
+def _half_violin_side(method, index=0):
+    """Put TabPFN above the setting row and TabICL below it.
+
+    The forest y-axis is inverted, so ``low`` (smaller y) appears visually above
+    the setting label and ``high`` appears below it. Unknown methods alternate
+    to keep two half violins from overlapping.
+    """
+    if method in TABPFN_METHODS:
+        return 'low'
+    if str(method).startswith('TabICL'):
+        return 'high'
+    return 'low' if index % 2 == 0 else 'high'
+
+
 def plot_effect_forest(effect_frame, metrics=('AUC', 'Brier'), labels=None,
-                       dir=None, figsize=None, save_path=None):
-    """Forest plot of the paired foundation-minus-tree effect, one figure per metric.
+                       dir=None, figsize=None, save_path=None, effect_samples=None):
+    """Compare the two foundation models with the best tree, one plot per metric.
 
     ``effect_frame`` is the raw table from ``build_effect_table`` with a
     ``(Setting, Metric)`` index and columns ``Mean effect``, ``SD effect``,
-    ``Tree method`` and ``Foundation method``. Each setting is one row: the
-    point is the mean paired effect and the bar is plus/minus one SD across
-    paired runs. A dashed line at 0 marks "no difference", so points to the
-    right mean the foundation model scored higher. The left axis names the
-    setting; the right axis names the subtracted pair, foundation minus tree, so
-    the label direction matches the sign of the effect.
+    ``Foundation rank``, ``Tree method`` and ``Foundation method``. Rank 1 is
+    the best foundation model and rank 2 the runner-up; both use the same best
+    tree method.
 
-    With several metrics, ``save_path`` gets the metric name added before the
-    suffix (``forest.png`` -> ``forest_AUC.png``).
+    When ``effect_samples`` is supplied (from ``build_effect_samples``), each
+    setting shows two paired-difference half violins instead of point-plus-SD
+    marks: TabPFN above the setting row, TabICL below it, and a black line at
+    each mean. Without samples, the older mean/SD errorbar view is retained for
+    legacy callers. The two series use deliberately different colours keyed to
+    the foundation method family, never to rank. Legend entries read
+    "TabPFN 3.5 - best tree" to make the subtraction direction explicit,
+    and a line handle names the black mean marker. A dashed line at 0 marks
+    "no difference"; values to the right mean the foundation scored higher.
+
+    Tables saved before the rank column was added still work: rows are ordered
+    by stored rank. With several metrics, ``save_path`` gets the metric name
+    added before the suffix (``forest.png`` -> ``forest_AUC.png``).
     """
     if effect_frame is None or getattr(effect_frame, 'empty', True):
         return
@@ -455,38 +640,127 @@ def plot_effect_forest(effect_frame, metrics=('AUC', 'Brier'), labels=None,
         if frame.empty:
             continue
 
-        settings = list(frame.index)
-        effects = frame['Mean effect'].to_numpy(dtype=float)
-        sds = frame['SD effect'].to_numpy(dtype=float)
-        y = np.arange(len(settings))
+        work = frame.copy()
+        if 'Foundation rank' not in work.columns:
+            work['Foundation rank'] = work.groupby(level=0).cumcount() + 1
+        settings = list(dict.fromkeys(work.index))
+        centers = {setting: index for index, setting in enumerate(settings)}
+
+        records = []
+        for setting, row in work.iterrows():
+            effect = pd.to_numeric(row.get('Mean effect'), errors='coerce')
+            if not np.isfinite(effect):
+                continue
+            sd = pd.to_numeric(row.get('SD effect'), errors='coerce')
+            rank = pd.to_numeric(row['Foundation rank'], errors='coerce')
+            records.append({
+                'setting': setting,
+                'method': str(row['Foundation method']),
+                'tree': str(row.get('Tree method', '')),
+                'rank': int(rank) if np.isfinite(rank) else 0,
+                'effect': float(effect),
+                'sd': float(sd) if np.isfinite(sd) else 0.0,
+            })
+        if not records:
+            continue
+
+        # Group by method, not by rank: a method that moves between first and
+        # second place keeps its colour and its own legend entry.
+        present = {record['method'] for record in records}
+        methods = [m for m in FOUNDATION_METHODS if m in present]
+        methods += sorted(present.difference(methods))
+        first_rank = {m: min(r['rank'] for r in records if r['method'] == m)
+                      for m in methods}
+        method_order = {m: index for index, m in enumerate(methods)}
+        methods.sort(key=lambda m: (first_rank[m], method_order[m]))
+        color_index = {
+            method: (FOUNDATION_METHODS.index(method)
+                     if method in FOUNDATION_METHODS else len(FOUNDATION_METHODS) + index)
+            for index, method in enumerate(methods)
+        }
+        offsets = {method: offset for method, offset in zip(
+            methods, (np.arange(len(methods)) - (len(methods) - 1) / 2) * 0.34)}
+
+        # Collect the paired differences before drawing anything. A partial set
+        # falls back to the summary view rather than leaving empty violin rows.
+        sample_values = {}
+        candidate = effect_samples
+        if (candidate is not None and not getattr(candidate, 'empty', True)
+                and {'Setting', 'Foundation method', 'Effect'}.issubset(candidate.columns)):
+            if 'Metric' in candidate.columns:
+                candidate = candidate[candidate['Metric'] == metric]
+            for method in methods:
+                for setting in settings:
+                    values = candidate.loc[
+                        (candidate['Setting'] == setting)
+                        & (candidate['Foundation method'] == method), 'Effect'
+                    ]
+                    values = pd.to_numeric(values, errors='coerce')
+                    values = values.replace([np.inf, -np.inf], np.nan).dropna()
+                    if len(values) >= 2:
+                        sample_values[(method, setting)] = values.to_numpy()
+        use_violins = len(sample_values) == len(methods) * len(settings)
 
         fig, ax = plt.subplots(figsize=figsize or (10, max(3.0, 0.7 * len(settings) + 1.6)))
         ax.axvline(0.0, color='black', linestyle='--', linewidth=1.2, zorder=1)
-        ax.errorbar(effects, y, xerr=sds, fmt='none', ecolor='#555555',
-                    elinewidth=1.4, capsize=4, zorder=2)
-        ax.scatter(effects, y, c=['#1B5E9A' if v >= 0 else '#9E292F' for v in effects],
-                   s=90, edgecolors='black', linewidth=1.0, zorder=3)
+        legend_handles = []
 
+        if use_violins:
+            for index, method in enumerate(methods):
+                color = _forest_color(method, color_index[method])
+                side = _half_violin_side(method, index)
+                for setting in settings:
+                    parts = ax.violinplot(
+                        [sample_values[(method, setting)]],
+                        positions=[centers[setting]], orientation='horizontal',
+                        side=side, widths=0.34, points=100,
+                        showmeans=True, showmedians=False, showextrema=False,
+                    )
+                    body = parts['bodies'][0]
+                    body.set_facecolor(color)
+                    body.set_edgecolor(color)
+                    body.set_alpha(0.75)
+                    body.set_zorder(2)
+                    parts['cmeans'].set_color('black')
+                    parts['cmeans'].set_linewidth(2.2)
+                    parts['cmeans'].set_zorder(4)
+                legend_handles.append(Patch(
+                    facecolor=color, edgecolor=color, alpha=0.75,
+                    label=f'{DISPLAY_NAMES.get(method, method)} - best tree',
+                ))
+            legend_handles.append(Line2D(
+                [0], [0], color='black', linewidth=2.2,
+                label='Mean paired effect',
+            ))
+        else:
+            for index, method in enumerate(methods):
+                selected = [r for r in records if r['method'] == method]
+                color = _forest_color(method, color_index[method])
+                ax.errorbar(
+                    [r['effect'] for r in selected],
+                    [centers[r['setting']] + offsets[method] for r in selected],
+                    xerr=[r['sd'] for r in selected], fmt='o', color=color, ecolor=color,
+                    elinewidth=1.4, capsize=4, markersize=7, markeredgecolor='black',
+                    markeredgewidth=0.8, zorder=3,
+                )
+                legend_handles.append(Line2D(
+                    [0], [0], color=color, marker='o', linestyle='none',
+                    markersize=7, markeredgecolor='black',
+                    label=f'{DISPLAY_NAMES.get(method, method)} - best tree',
+                ))
+
+        y = np.arange(len(settings))
         ax.set_yticks(y)
         ax.set_yticklabels([_title(setting, labels) for setting in settings], fontsize=11)
-        ax.invert_yaxis()
-        ax.set_xlabel(f'Mean effect on {metric} (foundation - tree)', fontsize=12)
-        ax.set_title(f'Best tree vs best foundation — {metric}', fontsize=13, pad=12)
+        ax.set_xlabel(f'Paired effect on {metric} (foundation - tree)', fontsize=12)
+        ax.set_title(f'2 foundation models versus best tree — {metric}', fontsize=13, pad=12)
         ax.grid(axis='x', alpha=0.3)
-        ax.margins(x=0.25, y=0.15)
+        ax.margins(x=0.25, y=0.28 if use_violins else 0.18)
+        ax.invert_yaxis()
+        if len(legend_handles) > 1:
+            ax.legend(handles=legend_handles, loc='best', fontsize=9,
+                      frameon=True, framealpha=1)
 
-        # The right axis names the subtracted pair, foundation minus tree, so
-        # the sign of each point matches the printed difference.
-        right = ax.twinx()
-        right.set_ylim(ax.get_ylim())
-        right.set_yticks(y)
-        right.set_yticklabels(
-            [f"{frame.loc[setting, 'Foundation method']} - {frame.loc[setting, 'Tree method']}"
-             for setting in settings],
-            fontsize=9, color='#333333')
-        right.tick_params(axis='y', length=0)
-        for spine in right.spines.values():
-            spine.set_visible(False)
         fig.tight_layout()
 
         name = base
@@ -519,6 +793,8 @@ def plot_gain_heatmap(gain_frame, metrics=('AUC', 'Brier'), labels=None,
     a setting stands out even when settings differ in scale. Only the colours are
     relative to the row; every cell prints the actual signed sensitivity-minus-main
     gain, so the same value can take a different colour in a different setting.
+    Dark vertical borders split the baseline, tree and foundation columns, and a
+    labelled strip above the heatmap names each of those sections.
 
     With several metrics, ``save_path`` gets the metric name added before the
     suffix (``gain.png`` -> ``gain_AUC.png``).
@@ -537,8 +813,15 @@ def plot_gain_heatmap(gain_frame, metrics=('AUC', 'Brier'), labels=None,
         if frame.empty:
             continue
 
-        methods = [m for m in METHOD_ORDER if m in frame.columns]
-        values = frame[methods].apply(pd.to_numeric, errors='coerce').to_numpy(dtype=float)
+        # Report tables print display names (e.g. QUADRO for Quadro), so accept
+        # either spelling when reading a saved gain table.
+        columns = {m: m if m in frame.columns else DISPLAY_NAMES.get(m, m)
+                   for m in METHOD_ORDER}
+        methods = [m for m, column in columns.items() if column in frame.columns]
+        if not methods:
+            continue
+        values = (frame[[columns[m] for m in methods]]
+                  .apply(pd.to_numeric, errors='coerce').to_numpy(dtype=float))
 
         # Higher is better for AUC; lower is better for Brier and ClassError.
         # A change in the wrong direction counts as no improvement.
@@ -552,7 +835,7 @@ def plot_gain_heatmap(gain_frame, metrics=('AUC', 'Brier'), labels=None,
         scaled = improvement / row_max
 
         fig, ax = plt.subplots(
-            figsize=figsize or (0.75 * len(methods) + 3.5, 0.55 * len(frame) + 2.2))
+            figsize=figsize or (0.75 * len(methods) + 3.5, 0.55 * len(frame) + 3.2))
         im = ax.imshow(scaled, cmap='RdBu_r', vmin=0, vmax=1, aspect='auto')
 
         ax.set_xticks(np.arange(len(methods)))
@@ -570,13 +853,41 @@ def plot_gain_heatmap(gain_frame, metrics=('AUC', 'Brier'), labels=None,
                 ax.text(j, i, f'{value:+.3f}', ha='center', va='center', fontsize=8,
                         color='white' if strong else 'black')
 
-        ax.set_title(f'{sensitivity_note} — {metric}', fontsize=13, pad=12)
+        # Mark the baseline/tree-ensemble/foundation columns with dark borders
+        # and a thin strip above the heatmap, even when a method is missing.
+        # The full family names are kept here as elsewhere in the report.
+        sections = []
+        for title, members, background, border in GROUPS:
+            indices = [index for index, method in enumerate(methods) if method in members]
+            if indices:
+                sections.append((title, min(indices), max(indices),
+                                 background, border))
+        for _, left, _, _, _ in sections[1:]:
+            ax.axvline(left - 0.5, color='#222222', linewidth=1.5, zorder=5)
+
         cbar = fig.colorbar(im, ax=ax, fraction=0.03, pad=0.02)
         cbar.set_label('Relative improvement per setting (labels are actual gains)',
                        fontsize=9)
         cbar.set_ticks([0, 1])
         cbar.set_ticklabels(['least', 'largest'])
-        fig.tight_layout()
+        fig.tight_layout(rect=[0, 0, 1, 0.86])
+
+        # Place the header after tight_layout so it stays aligned with the
+        # columns in the final, possibly resized, heatmap axes.
+        x0, y0, width, height = ax.get_position().bounds
+        # A thin category strip sitting directly on top of the first setting row.
+        header = fig.add_axes([x0, y0 + height, width, 0.16 * height / 3])
+        header.set_xlim(ax.get_xlim())
+        header.set_ylim(0, 1)
+        header.axis('off')
+        for label, left, right, background, border in sections:
+            header.add_patch(Rectangle(
+                (left - 0.5, 0), right - left + 1, 1,
+                facecolor=background, edgecolor=border, linewidth=1.0,
+            ))
+            header.text((left + right) / 2, 0.5, label, ha='center', va='center',
+                        fontsize=8, fontweight='bold', color='#222222')
+        header.set_title(f'{sensitivity_note} — {metric}', fontsize=13, pad=6)
 
         name = base
         if base is not None:

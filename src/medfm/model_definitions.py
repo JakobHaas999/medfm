@@ -472,17 +472,37 @@ def run_qda(X_train, X_test, y_train, y_test, X_train_sub, y_train_sub, X_val, y
 
 ################################################################################
 # QUADRO
+
+def _quadro_moment_options(*, gaussian, gamma=None):
+    """moment and kurtosis settings for QUADRO.
+    
+    Fan et al. (2015): 
+    Section 7.1, uses sample means and sample covariances for Gaussian data, 
+    where the kurtosis parameter is gamma = 0. 
+    
+    Section 7.2, uses robust MM/rank moments and a known gamma for elliptical t data.
+    """
+    if gaussian:
+        return {'robust': False, 'gamma': 0.0}
+    return {'robust': True, 'gamma': 'auto' if gamma is None else gamma}
+
+
 def run_quadro(X_train, X_test, y_train, y_test,
                X_train_sub, y_train_sub, X_val, y_val,
-               random_state=None, *, metrics=None, solver="admm"):
-    """Tune QUADRO penalties, fit once on standardized data, and return metrics/times."""
+               random_state=None, *, metrics=None, solver="linearized_alm",
+               gaussian=True, gamma=None):
 
     # setup
     setup_start = perf_counter()
     from quadro import QUADROClassifier
     from threadpoolctl import threadpool_limits
-    quadro = QUADROClassifier(standardize=False, solver=solver)
-    penalty_pairs = [(0., 0.), (.01, .01), (.01, .1), (.1, .1), (.1, 1.)]
+    quadro = QUADROClassifier(
+        standardize=False, solver=solver, rho=0.5,
+        **_quadro_moment_options(gaussian=gaussian, gamma=gamma),
+    )
+    penalty_pairs = ( (.01, .01), (.01, .04), (.1, .001), (.1, .1), (.1, .4),
+    (.5, .005), (.5, .5), (1., .01), (1., 1.), (1., 4.),
+    )
     param_grid = [
         {'lambda_quadratic': [quadratic], 'lambda_linear': [linear]}
         for quadratic, linear in penalty_pairs

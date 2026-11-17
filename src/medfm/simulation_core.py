@@ -31,6 +31,17 @@ from .utils import capture_output
 from .execution import initialize_worker, run_logged_iteration
 from . import config
 
+
+def _quadro_distribution_options(dist, df):
+    """Translate a simulation distribution into QUADRO moment/kurtosis options."""
+    gaussian = str(dist).lower() == 'normal'
+    gamma = None
+    if not gaussian and df is not None and df > 4:
+        # Multivariate t with df > 4 has kurtosis parameter 2 / (df - 4).
+        gamma = 2.0 / (df - 4)
+    return gaussian, gamma
+
+
 #parallel functions are after this function
 
 def _run_and_pack(fn, y_test, *args, **kwargs):
@@ -81,6 +92,7 @@ def simulation(n, mu, sigma1, sigma2, df=None, dist="Normal", iter=100, g_seed=2
     n1_tr, n2_tr = n['n1_tr'], n['n2_tr']
     n1_te, n2_te = n['n1_te'], n['n2_te']
     mu1, mu2 = mu['mu1'], mu['mu2']
+    quadro_gaussian, quadro_gamma = _quadro_distribution_options(dist, df)
 
     np.random.seed(g_seed)
 
@@ -214,7 +226,9 @@ def simulation(n, mu, sigma1, sigma2, df=None, dist="Normal", iter=100, g_seed=2
 
             _run_and_store(errors, 'Quadro', run_quadro, y_test,
                    X_train, X_test, y_train, y_test,
-                   X_train_sub, y_train_sub, X_val, y_val, random_state=i+g_seed)
+                   X_train_sub, y_train_sub, X_val, y_val,
+                   random_state=i+g_seed, gaussian=quadro_gaussian,
+                   gamma=quadro_gamma)
 
             _run_and_store(errors, 'TabPFN_v25', run_tabpfn_v25, y_test,
                    X_train, X_test, y_train, y_test, random_state=i+g_seed)
@@ -257,6 +271,7 @@ def evaluate_on_sim_data(n, mu, sigma1, sigma2, df=None, dist="Normal", iter=100
     n1_tr, n2_tr = n['n1_tr'], n['n2_tr']
     n1_te, n2_te = n['n1_te'], n['n2_te']
     mu1, mu2 = mu['mu1'], mu['mu2']
+    quadro_gaussian, quadro_gamma = _quadro_distribution_options(dist, df)
 
     np.random.seed(g_seed)
 
@@ -386,6 +401,7 @@ def _single_sim_iteration(i, n1_tr, n2_tr, n1_te, n2_te, mu1, mu2,
     
     """Generate the data and evaluate the models for one parallel Monte Carlo repetition."""
     np.random.seed(g_seed)
+    quadro_gaussian, quadro_gamma = _quadro_distribution_options(dist, df)
     
     rng_tr = np.random.RandomState(i+ g_seed)
     rng_te = np.random.RandomState(i+ g_seed + 2000)
@@ -458,7 +474,8 @@ def _single_sim_iteration(i, n1_tr, n2_tr, n1_te, n2_te, mu1, mu2,
             run_quadro, y_test,
             X_train, X_test, y_train, y_test,
             X_train_sub, y_train_sub, X_val, y_val,
-            random_state=i+g_seed),
+            random_state=i+g_seed, gaussian=quadro_gaussian,
+            gamma=quadro_gamma),
         'TabPFN_v25': _run_and_pack(
             run_tabpfn_v25, y_test,
             X_train, X_test, y_train, y_test, random_state=i+g_seed),

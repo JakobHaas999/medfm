@@ -2,16 +2,23 @@ import os
 import numpy as np
 import pandas as pd
 
-from .plot_functions import BASELINE_METHODS, TREE_METHODS, FOUNDATION_METHODS
+from .plot_functions import (
+    BASELINE_METHODS,
+    DISPLAY_NAMES,
+    FOUNDATION_METHODS,
+    GROUP_LABELS,
+    TREE_METHODS,
+)
 
 METHODS = BASELINE_METHODS + TREE_METHODS + FOUNDATION_METHODS
 
-# Reporting groups. Baseline is summarized but excluded from best-vs-best;
-# the head-to-head comparison is tree ensembles versus foundation models.
+# Reporting groups use the same full family names as the plots. Baseline
+# methods are summarized but excluded from best-vs-best; the head-to-head
+# comparison is tree ensemble methods versus foundation models.
 GROUPS = [
-    ('Baseline', BASELINE_METHODS),
-    ('Tree', TREE_METHODS),
-    ('Foundation', FOUNDATION_METHODS),
+    (GROUP_LABELS['baseline'], BASELINE_METHODS),
+    (GROUP_LABELS['tree'], TREE_METHODS),
+    (GROUP_LABELS['foundation'], FOUNDATION_METHODS),
 ]
 
 # Scalar metrics only. FPR/TPR/Probas are list-valued — used by plots.
@@ -20,6 +27,52 @@ METRICS = ['AUC', 'ClassError', 'Brier', 'Time', 'SetupTime', 'TuneTime',
            'FitTime', 'PredictTime', 'CalSlope', 'CalIntercept']
 
 HIGHER_IS_BETTER = {'AUC'}
+
+# Result columns keep their stored keys, but report tables should spell method
+# names the same way the plots do. Only case-only aliases are normalised here
+# (currently Quadro -> QUADRO); other display names keep the stored key so
+# column lookups by downstream code remain stable.
+_TABLE_NAME_FIXES = {
+    method: display for method, display in DISPLAY_NAMES.items()
+    if method.lower() == display.lower()
+}
+
+
+def _printable(value):
+    """Use the plot spelling for a method key, leaving all other values alone."""
+    return _TABLE_NAME_FIXES.get(value, value) if isinstance(value, str) else value
+
+
+def _presentation(table):
+    """Copy of a report table whose method names use their plot spelling."""
+    printable = table.rename(columns=_printable)
+    for column in printable.columns:
+        if printable[column].dtype == object:
+            printable[column] = printable[column].map(_printable)
+    return printable
+
+
+def _has_observed_values(df, method, measure):
+    """True when a result frame has at least one usable value for this pair."""
+    column = f'{method}_{measure}'
+    if column not in df.columns:
+        return False
+    values = pd.to_numeric(df[column], errors='coerce').replace([np.inf, -np.inf], np.nan)
+    return values.notna().any()
+
+
+def _available_methods(frames, methods, measures):
+    """Keep only methods observed in the supplied results.
+
+    A method such as EXAONE is only present in the pilot, so the main and
+    sensitivity reports would otherwise print an all-missing column.
+    """
+    frames = list(frames)
+    return [
+        method for method in methods
+        if any(_has_observed_values(df, method, measure)
+               for df in frames for measure in measures)
+    ]
 
 
 def _save_table(table, filename, tables_dir):
@@ -50,7 +103,7 @@ def build_measures_table(errors_dict, metrics=None, filename='table.csv',
         return None
     
     metrics = metrics or METRICS
-    methods = methods or METHODS
+    methods = _available_methods(errors_dict.values(), methods or METHODS, metrics)
 
     rows = []
     for sid, df in errors_dict.items():
@@ -66,8 +119,9 @@ def build_measures_table(errors_dict, metrics=None, filename='table.csv',
             rows.append(row)
 
     table = pd.DataFrame(rows).set_index(['Setting', 'Metric'])
-    _save_table(table, filename, tables_dir)
-    return table.style.apply(_style_best, axis=1)
+    printable = _presentation(table)
+    _save_table(printable, filename, tables_dir)
+    return printable.style.apply(_style_best, axis=1)
 
 
 def build_gain_table(base_dict, sens_dict, metric='AUC',
@@ -89,6 +143,15 @@ def build_gain_table(base_dict, sens_dict, metric='AUC',
         print(f"⚠️ no matching settings for {filename} — skipping")
         return None
 
+    # A gain needs the method on both sides of the comparison. Keeping a
+    # method that only ran in one variant produced empty EXAONE columns.
+    available = set(_available_methods(base_dict.values(), methods, measures))
+    available &= set(_available_methods(sens_dict.values(), methods, measures))
+    methods = [method for method in methods if method in available]
+    if not methods:
+        print(f"⚠️ no shared methods for {filename} — skipping")
+        return None
+
     rows = []
     for sid in common:
         b, s = base_dict[sid], sens_dict[sid]
@@ -108,8 +171,9 @@ def build_gain_table(base_dict, sens_dict, metric='AUC',
         table = table.drop(columns='Metric').set_index('Setting')
     else:
         table = table.set_index(['Setting', 'Metric'])
-    _save_table(table, filename, tables_dir)
-    return table.style.apply(_style_gain, axis=1, metric=metric).format('{:+.3f}', na_rep='—')
+    printable = _presentation(table)
+    _save_table(printable, filename, tables_dir)
+    return printable.style.apply(_style_gain, axis=1, metric=metric).format('{:+.3f}', na_rep='—')
 
 
 def _rank_methods(df, methods, metric):
@@ -163,37 +227,55 @@ def build_best_methods_table(errors_dict, metrics=None, filename='best_methods.c
         print(f"⚠️ no methods to summarize for {filename} — skipping")
         return None
     table = pd.DataFrame(rows).set_index(['Setting', 'Metric', 'Group'])
-    _save_table(table, filename, tables_dir)
-    return table.style.format({column: '{:.3f}' for column in table if column.endswith(('mean', 'SD'))}, na_rep='—')
+    printable = _presentation(table)
+    _save_table(printable, filename, tables_dir)
+    return printable.style.format(
+        {column: '{:.3f}' for column in printable if column.endswith(('mean', 'SD'))},
+        na_rep='—',
+    )
+
+
+def _effect_pairs(df, metric, all_models=False):
+    """Select (rank, foundation method, tree method) pairs for one measure.
+
+    The two headline comparisons use one shared best tree method, so the only
+    difference between them is the foundation method. ``all_models`` adds the
+    remaining foundation models and the remaining tree models for diagnostics.
+    """
+    tree = _rank_methods(df, TREE_METHODS, metric)
+    foundation = _rank_methods(df, FOUNDATION_METHODS, metric)
+    if not tree or not foundation:
+        return []
+
+    pairs = [(rank, method, tree[0])
+             for rank, method in enumerate(foundation[:2], start=1)]
+    if all_models:
+        pairs += [(rank, method, tree[0])
+                  for rank, method in enumerate(foundation[2:], start=3)]
+        pairs += [(1, foundation[0], method) for method in tree[1:]]
+    return pairs
 
 
 def build_effect_table(errors_dict, metrics=None, filename='best_vs_best.csv', tables_dir=None, all_models=False):
     """Summarize within-run differences, foundation minus tree, as mean and SD.
 
     Baseline methods are excluded from this head-to-head comparison. Select the
-    best tree and best foundation method once per measure using all repetitions.
-    For each setting and measure the table reports the selected method names,
-    their mean values over the paired runs, the mean paired difference
-    (foundation minus tree), its SD, and the number of paired runs. A positive
-    mean effect means the foundation model scored higher; for Brier and
-    ClassError lower is better, so a negative effect favors the foundation model.
-    With all_models=True, compare every model with the best method in the other
-    comparison group. Calibration effects use raw slopes/intercepts, not their
-    distances.
+    best tree method and the best two foundation methods once per measure using
+    all repetitions. Each setting/measure then has one row per foundation: the
+    best foundation against the best tree (rank 1) and the second-best foundation
+    against the same best tree (rank 2). ``Foundation rank`` identifies the row
+    so both effects can be drawn as separate series. A positive mean effect means
+    the foundation model scored higher; for Brier and ClassError lower is better,
+    so a negative effect favors the foundation model. With all_models=True,
+    compare every model with the best method in the other comparison group.
+    Calibration effects use raw slopes/intercepts, not their distances.
     """
     metrics = metrics or METRICS
     rows = []
     for sid, df in errors_dict.items():
         for metric in metrics:
-            tree = _rank_methods(df, TREE_METHODS, metric)
-            foundation = _rank_methods(df, FOUNDATION_METHODS, metric)
-            if not tree or not foundation:
-                continue
-            pairs = [(foundation[0], tree[0])]
-            if all_models:
-                pairs += [(method, tree[0]) for method in foundation[1:]]
-                pairs += [(foundation[0], method) for method in tree[1:]]
-            for foundation_method, tree_method in pairs:
+            for foundation_rank, foundation_method, tree_method in _effect_pairs(
+                    df, metric, all_models=all_models):
                 foundation_values = pd.to_numeric(df[f'{foundation_method}_{metric}'], errors='coerce')
                 tree_values = pd.to_numeric(df[f'{tree_method}_{metric}'], errors='coerce')
                 paired = pd.DataFrame({'Foundation': foundation_values, 'Tree': tree_values})
@@ -201,6 +283,7 @@ def build_effect_table(errors_dict, metrics=None, filename='best_vs_best.csv', t
                 differences = paired['Foundation'] - paired['Tree']
                 rows.append({
                     'Setting': sid, 'Metric': metric,
+                    'Foundation rank': foundation_rank,
                     'Tree method': tree_method, 'Foundation method': foundation_method,
                     'Tree mean': paired['Tree'].mean(),
                     'Foundation mean': paired['Foundation'].mean(),
@@ -211,11 +294,45 @@ def build_effect_table(errors_dict, metrics=None, filename='best_vs_best.csv', t
         print(f"⚠️ no group comparisons for {filename} — skipping")
         return None
     table = pd.DataFrame(rows).set_index(['Setting', 'Metric'])
-    _save_table(table, filename, tables_dir)
-    return table.style.format({
+    printable = _presentation(table)
+    _save_table(printable, filename, tables_dir)
+    return printable.style.format({
         'Tree mean': '{:.3f}', 'Foundation mean': '{:.3f}',
         'Mean effect': '{:+.3f}', 'SD effect': '{:.3f}',
     }, na_rep='—')
+
+
+def build_effect_samples(errors_dict, metrics=None, filename=None, tables_dir=None):
+    """Per-run foundation-minus-tree differences for the headline comparisons.
+
+    ``build_effect_table`` collapses the paired differences to a mean and SD.
+    The half-violin forest needs the differences themselves, so this keeps one
+    row per repetition with the setting, metric, foundation method, tree method
+    and signed effect. Method names stay as stored result keys so plots can look
+    up their colours. Set ``filename`` to also save the long table as a CSV.
+    """
+    metrics = metrics or METRICS
+    rows = []
+    for sid, df in errors_dict.items():
+        for metric in metrics:
+            for foundation_rank, foundation_method, tree_method in _effect_pairs(df, metric):
+                foundation_values = pd.to_numeric(df[f'{foundation_method}_{metric}'], errors='coerce')
+                tree_values = pd.to_numeric(df[f'{tree_method}_{metric}'], errors='coerce')
+                paired = pd.DataFrame({'Foundation': foundation_values, 'Tree': tree_values})
+                paired = paired.replace([np.inf, -np.inf], np.nan).dropna()
+                for run, effect in (paired['Foundation'] - paired['Tree']).items():
+                    rows.append({
+                        'Setting': sid, 'Metric': metric,
+                        'Foundation rank': foundation_rank,
+                        'Tree method': tree_method, 'Foundation method': foundation_method,
+                        'Run': run, 'Effect': float(effect),
+                    })
+    if not rows:
+        print(f"⚠️ no paired samples for {filename} — skipping")
+        return None
+    table = pd.DataFrame(rows)
+    _save_table(table, filename, tables_dir)
+    return table
 
 
 def _style_best(row):

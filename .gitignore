@@ -43,3 +43,8 @@ catboost_info/
 
 # Data-cleaning notes and predictor lists are tracked.
 tests/
+docs/physionet/
+docs/quadro
+
+# archiv past version
+benchmark-tabpfn-medical/

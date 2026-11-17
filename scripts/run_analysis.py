@@ -113,10 +113,11 @@ def main(argv=None):
             plot_gain_heatmap,
             plot_roc_curves_grid,
             plot_runtime_barplot_simple,
+            plot_violin_grid,
         )
         from medfm.table_functions import (
             METRICS, build_measures_table, build_gain_table,
-            build_best_methods_table, build_effect_table,
+            build_best_methods_table, build_effect_table, build_effect_samples,
         )
         from medfm.utils import discover_sim, load_fixed, read_bayes_auc, read_labels
         files = {path.stem: path for path in sorted(args.results.glob('*.csv'))}
@@ -149,6 +150,7 @@ def main(argv=None):
         build_measures_table(results, filename='measures.csv', tables_dir=table_dir)
         build_best_methods_table(results, filename='best_methods.csv', tables_dir=table_dir)
         effect = build_effect_table(results, filename='best_vs_best.csv', tables_dir=table_dir)
+        effect_samples = build_effect_samples(results, metrics=METRICS)
         gain = None
         if baseline is not None:
             gain = build_gain_table(
@@ -157,11 +159,13 @@ def main(argv=None):
             )
         plots = str(plot_dir) + '/'
         plot_boxplots_grid(results, names, labels=labels, metric='AUC', dir=plots, save_path='auc_box.png', bayes_auc=bayes, show_bayes_auc=not args.no_bayes_auc)
+        plot_violin_grid(results, names, labels=labels, metric='AUC', dir=plots, save_path='auc_violin.png', bayes_auc=bayes, show_bayes_auc=not args.no_bayes_auc)
         plot_boxplots_grid(results, names, labels=labels, metric='Brier', dir=plots, save_path='brier_box.png')
         plot_roc_curves_grid(results, names, labels=labels, dir=plots, save_path='roc.png', bayes_auc=bayes, show_bayes_roc=not args.no_bayes_roc)
         plot_runtime_barplot_simple(results, names, labels=labels, dir=plots, save_path='runtime.png')
         if effect is not None:
-            plot_effect_forest(effect.data, dir=plots, save_path='forest.png')
+            plot_effect_forest(effect.data, effect_samples=effect_samples,
+                               dir=plots, save_path='forest.png')
         if gain is not None:
             base_rows = training_rows(next(iter(baseline_files.values())))
             sens_rows = training_rows(next(iter(sensitivity_files.values())))
