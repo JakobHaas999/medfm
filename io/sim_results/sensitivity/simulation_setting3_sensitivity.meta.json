@@ -1,5 +1,5 @@
 {
-  "label": "Setting 3: Nonlinear Interactions with Sparse Linear Signal (Sensitivity)",
+  "label": "Setting 3: Mixed linear and quadratic signal (Sensitivity)",
   "n": {
     "n1_tr": 250,
     "n2_tr": 250,

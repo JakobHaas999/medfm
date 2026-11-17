@@ -9,6 +9,7 @@ from .plot_functions import (
     GROUP_LABELS,
     TREE_METHODS,
 )
+from .utils import monte_carlo_se
 
 METHODS = BASELINE_METHODS + TREE_METHODS + FOUNDATION_METHODS
 
@@ -52,13 +53,22 @@ def _presentation(table):
     return printable
 
 
+def _numeric(values):
+    """Observed numeric values only: drop non-numeric and non-finite entries."""
+    return pd.to_numeric(values, errors='coerce').replace([np.inf, -np.inf], np.nan).dropna()
+
+
+def _mcse(values):
+    """Monte Carlo SE of a mean: sample SD divided by sqrt(number of runs)."""
+    return monte_carlo_se(values)
+
+
 def _has_observed_values(df, method, measure):
     """True when a result frame has at least one usable value for this pair."""
     column = f'{method}_{measure}'
     if column not in df.columns:
         return False
-    values = pd.to_numeric(df[column], errors='coerce').replace([np.inf, -np.inf], np.nan)
-    return values.notna().any()
+    return not _numeric(df[column]).empty
 
 
 def _available_methods(frames, methods, measures):
@@ -93,7 +103,10 @@ def _save_table(table, filename, tables_dir):
 
 def build_measures_table(errors_dict, metrics=None, filename='table.csv',
                          methods=None, tables_dir=None):
-    """rows=(Setting, Metric), cols=method, values='mean ± std'.
+    """rows=(Setting, Metric), cols=method, values='mean ± SD (MCSE …)'.
+
+    The SD describes run-to-run spread; the bracketed MCSE is the SE of the
+    reported mean (SD / sqrt(number of Monte Carlo runs)).
 
     errors_dict : {setting_id: pd.DataFrame}
     Set filename=None to display the styled table without saving a CSV.
@@ -112,8 +125,9 @@ def build_measures_table(errors_dict, metrics=None, filename='table.csv',
             for m in methods:
                 col = f'{m}_{metric}'
                 if col in df.columns:
-                    v = pd.to_numeric(df[col], errors='coerce').dropna()
-                    row[m] = f"{v.mean():.3f} ± {v.std():.3f}" if len(v) else '—'
+                    v = _numeric(df[col])
+                    row[m] = (f"{v.mean():.3f} ± {v.std():.3f} (MCSE {_mcse(v):.4f})"
+                              if not v.empty else '—')
                 else:
                     row[m] = '—'
             rows.append(row)
@@ -124,23 +138,26 @@ def build_measures_table(errors_dict, metrics=None, filename='table.csv',
     return printable.style.apply(_style_best, axis=1)
 
 
-def build_gain_table(base_dict, sens_dict, metric='AUC',
-                     filename='gains.csv', methods=None, tables_dir=None, metrics=None):
+# Only the three classification measures get a sample-size change table.
+# Runtime and calibration shifts are already visible in measures.csv.
+GAIN_METRICS = ['AUC', 'Brier', 'ClassError']
+
+
+def build_gain_table(base_dict, sens_dict, metrics=GAIN_METRICS, methods=None,
+                     filename='sample_size_changes.csv', tables_dir=None):
     """Sensitivity mean minus baseline mean for matching settings and measures.
 
-    These are differences of means: baseline and sensitivity runs are independent.
-    Pass metrics=METRICS for a table of all scalar measures.
+    Only AUC, Brier and ClassError are reported by default: these are the
+    classification results the sample-size change is meant to describe. The
+    table holds changes in means only, never changes in Monte Carlo SE.
     """
+    measures = list(metrics)
     methods = methods or METHODS
-    measures = metrics if metrics is not None else [metric]
-
     if not base_dict or not sens_dict:
-        print(f"⚠️ empty input for {filename} — skipping")
         return None
 
     common = [s for s in base_dict if s in sens_dict]
     if not common:
-        print(f"⚠️ no matching settings for {filename} — skipping")
         return None
 
     # A gain needs the method on both sides of the comparison. Keeping a
@@ -149,7 +166,6 @@ def build_gain_table(base_dict, sens_dict, metric='AUC',
     available &= set(_available_methods(sens_dict.values(), methods, measures))
     methods = [method for method in methods if method in available]
     if not methods:
-        print(f"⚠️ no shared methods for {filename} — skipping")
         return None
 
     rows = []
@@ -159,21 +175,14 @@ def build_gain_table(base_dict, sens_dict, metric='AUC',
             row = {'Setting': sid, 'Metric': measure}
             for m in methods:
                 col = f'{m}_{measure}'
-                bv = (pd.to_numeric(b[col], errors='coerce').replace([np.inf, -np.inf], np.nan).mean()
-                      if col in b.columns else np.nan)
-                sv = (pd.to_numeric(s[col], errors='coerce').replace([np.inf, -np.inf], np.nan).mean()
-                      if col in s.columns else np.nan)
-                row[m] = sv - bv
+                bv = _numeric(b[col]) if col in b.columns else pd.Series(dtype=float)
+                sv = _numeric(s[col]) if col in s.columns else pd.Series(dtype=float)
+                row[m] = sv.mean() - bv.mean()
             rows.append(row)
 
-    table = pd.DataFrame(rows)
-    if metrics is None:
-        table = table.drop(columns='Metric').set_index('Setting')
-    else:
-        table = table.set_index(['Setting', 'Metric'])
-    printable = _presentation(table)
+    printable = _presentation(pd.DataFrame(rows).set_index(['Setting', 'Metric']))
     _save_table(printable, filename, tables_dir)
-    return printable.style.apply(_style_gain, axis=1, metric=metric).format('{:+.3f}', na_rep='—')
+    return printable.style.format('{:+.3f}', na_rep='—')
 
 
 def _rank_methods(df, methods, metric):
@@ -197,8 +206,8 @@ def build_best_methods_table(errors_dict, metrics=None, filename='best_methods.c
     """Best and second-best methods in each reporting group, per setting/dataset and measure.
 
     Groups are baseline, tree, and foundation. Rank once using all repetitions;
-    show the raw measure as mean and sample SD. Ties use the existing method
-    order. This is a descriptive result summary.
+    show the raw measure as mean, sample SD, and Monte Carlo SE of the mean.
+    Ties use the existing method order. This is a descriptive result summary.
     """
     metrics = metrics or METRICS
     rows = []
@@ -212,15 +221,17 @@ def build_best_methods_table(errors_dict, metrics=None, filename='best_methods.c
                 for rank, label in [(0, 'Best'), (1, 'Second')]:
                     if rank < len(ranked):
                         method = ranked[rank]
-                        values = pd.to_numeric(df[f'{method}_{metric}'], errors='coerce').replace([np.inf, -np.inf], np.nan)
+                        values = _numeric(df[f'{method}_{metric}'])
                         row[f'{label} method'] = method
                         row[f'{label} mean'] = values.mean()
                         row[f'{label} SD'] = values.std()
+                        row[f'{label} MCSE'] = _mcse(values)
                         row[f'{label} runs'] = values.count()
                     else:
                         row[f'{label} method'] = '—'
                         row[f'{label} mean'] = np.nan
                         row[f'{label} SD'] = np.nan
+                        row[f'{label} MCSE'] = np.nan
                         row[f'{label} runs'] = 0
                 rows.append(row)
     if not rows:
@@ -230,7 +241,8 @@ def build_best_methods_table(errors_dict, metrics=None, filename='best_methods.c
     printable = _presentation(table)
     _save_table(printable, filename, tables_dir)
     return printable.style.format(
-        {column: '{:.3f}' for column in printable if column.endswith(('mean', 'SD'))},
+        {column: '{:.4f}' if column.endswith('MCSE') else '{:.3f}'
+         for column in printable if column.endswith(('mean', 'SD', 'MCSE'))},
         na_rep='—',
     )
 
@@ -257,7 +269,7 @@ def _effect_pairs(df, metric, all_models=False):
 
 
 def build_effect_table(errors_dict, metrics=None, filename='best_vs_best.csv', tables_dir=None, all_models=False):
-    """Summarize within-run differences, foundation minus tree, as mean and SD.
+    """Summarize within-run differences, foundation minus tree, as mean, SD, and MCSE.
 
     Baseline methods are excluded from this head-to-head comparison. Select the
     best tree method and the best two foundation methods once per measure using
@@ -276,10 +288,11 @@ def build_effect_table(errors_dict, metrics=None, filename='best_vs_best.csv', t
         for metric in metrics:
             for foundation_rank, foundation_method, tree_method in _effect_pairs(
                     df, metric, all_models=all_models):
-                foundation_values = pd.to_numeric(df[f'{foundation_method}_{metric}'], errors='coerce')
-                tree_values = pd.to_numeric(df[f'{tree_method}_{metric}'], errors='coerce')
-                paired = pd.DataFrame({'Foundation': foundation_values, 'Tree': tree_values})
-                paired = paired.replace([np.inf, -np.inf], np.nan).dropna()
+                foundation_values = _numeric(df[f'{foundation_method}_{metric}'])
+                tree_values = _numeric(df[f'{tree_method}_{metric}'])
+                # Keep the original repetition indices: a missing value in one
+                # method must drop the same run from both sides of the pair.
+                paired = pd.DataFrame({'Foundation': foundation_values, 'Tree': tree_values}).dropna()
                 differences = paired['Foundation'] - paired['Tree']
                 rows.append({
                     'Setting': sid, 'Metric': metric,
@@ -288,6 +301,7 @@ def build_effect_table(errors_dict, metrics=None, filename='best_vs_best.csv', t
                     'Tree mean': paired['Tree'].mean(),
                     'Foundation mean': paired['Foundation'].mean(),
                     'Mean effect': differences.mean(), 'SD effect': differences.std(),
+                    'MCSE effect': _mcse(differences),
                     'Paired runs': len(differences),
                 })
     if not rows:
@@ -298,7 +312,7 @@ def build_effect_table(errors_dict, metrics=None, filename='best_vs_best.csv', t
     _save_table(printable, filename, tables_dir)
     return printable.style.format({
         'Tree mean': '{:.3f}', 'Foundation mean': '{:.3f}',
-        'Mean effect': '{:+.3f}', 'SD effect': '{:.3f}',
+        'Mean effect': '{:+.3f}', 'SD effect': '{:.3f}', 'MCSE effect': '{:.4f}',
     }, na_rep='—')
 
 
@@ -359,23 +373,4 @@ def _style_best(row):
         else 'text-decoration: underline double' if c == second
         else ''
         for c in row.index
-    ]
-
-
-def _style_gain(row, metric='AUC'):
-    if isinstance(row.name, tuple):
-        metric = row.name[1]
-    # A raw calibration change has no single better direction.
-    if metric in ('CalSlope', 'CalIntercept'):
-        return [''] * len(row)
-    ordered = row.dropna().sort_values(ascending=metric not in HIGHER_IS_BETTER)
-    if ordered.empty:
-        return [''] * len(row)
-    top = ordered.iloc[0]
-    second = ordered.iloc[1] if len(ordered) > 1 else None
-    return [
-        'text-decoration: underline' if v == top
-        else 'text-decoration: underline double' if second is not None and v == second
-        else ''
-        for v in row
     ]

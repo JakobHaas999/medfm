@@ -473,6 +473,7 @@ def run_qda(X_train, X_test, y_train, y_test, X_train_sub, y_train_sub, X_val, y
 ################################################################################
 # QUADRO
 
+
 def _quadro_moment_options(*, gaussian, gamma=None):
     """moment and kurtosis settings for QUADRO.
     
@@ -485,6 +486,12 @@ def _quadro_moment_options(*, gaussian, gamma=None):
     if gaussian:
         return {'robust': False, 'gamma': 0.0}
     return {'robust': True, 'gamma': 'auto' if gamma is None else gamma}
+
+QUADRO_PENALTY_PAIRS = (
+    (.01, .01), (.01, .04), (.1, .001), (.1, .1), (.1, .4),
+    (.5, .005), (.5, .5), (1., .01), (1., 1.), (1., 4.),
+)
+
 
 
 def run_quadro(X_train, X_test, y_train, y_test,
@@ -500,12 +507,9 @@ def run_quadro(X_train, X_test, y_train, y_test,
         standardize=False, solver=solver, rho=0.5,
         **_quadro_moment_options(gaussian=gaussian, gamma=gamma),
     )
-    penalty_pairs = ( (.01, .01), (.01, .04), (.1, .001), (.1, .1), (.1, .4),
-    (.5, .005), (.5, .5), (1., .01), (1., 1.), (1., 4.),
-    )
     param_grid = [
         {'lambda_quadratic': [quadratic], 'lambda_linear': [linear]}
-        for quadratic, linear in penalty_pairs
+        for quadratic, linear in QUADRO_PENALTY_PAIRS
     ]
     scoring = make_scorer(roc_auc_score, response_method="predict_proba")
     grid_search = GridSearchCV(

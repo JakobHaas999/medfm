@@ -236,6 +236,11 @@ def load_blood_gas_data(path):
 	The research question is whether this hypoxemia
 	label is predictable from SpO2 and the other clinical variables available
 	at the blood gas. SpO2 is kept as a predictor.
+
+	Provenance: this data combines MIMIC-III and MIMIC-IV records. Those sources
+	overlap and MIMIC-IV regenerated patient identifiers, so the same subject
+	may appear under different IDs; patient-disjoint splitting cannot detect
+	that cross-source case.
 	"""
 	data3_path = path + "data3_blood_gas_oximetry.pkl" 
 	df3 = pd.read_pickle(data3_path)
@@ -250,7 +255,8 @@ def load_blood_gas_data(path):
 	df_temp['y'] = (df_temp['SaO2'] < THRESH_SAO2).astype(int)
 
 	# Step 2: shuffle patient order and keep unique_subject_id as the grouping
-	# key. Patients, not blood-gas rows.
+	# key. Patients, not blood-gas rows. Cross-source duplicates under different
+	# MIMIC identifiers cannot be detected by this grouping (see docstring).
 	rng = np.random.default_rng(42)
 	order = {sid: i for i, sid in enumerate(rng.permutation(df_temp['unique_subject_id'].drop_duplicates().to_numpy()))}
 	df_temp = (df_temp.assign(_ord=df_temp['unique_subject_id'].map(order))

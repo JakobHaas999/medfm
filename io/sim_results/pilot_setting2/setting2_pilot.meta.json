@@ -1,5 +1,5 @@
 {
-  "label": "Setting 2: Nonlinear Interactions with No Mean Shift",
+  "label": "Setting 2: Quadratic signal, no mean shift",
   "n": {
     "n1_tr": 100,
     "n2_tr": 100,

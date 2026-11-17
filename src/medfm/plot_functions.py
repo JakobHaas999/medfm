@@ -340,6 +340,8 @@ def plot_roc_curves_grid(errors_dict, settings_to_show, labels=None,
         _save_figure(fig, dir, _setting_filename(save_path, setting, multiple))
         if plt.get_backend().lower() != 'agg':
             plt.show()
+        if save_path is not None:
+            plt.close(fig)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -409,6 +411,8 @@ def plot_boxplots_grid(errors_dict, settings_to_show, metric='ClassError', label
         _save_figure(fig, dir, _setting_filename(save_path, setting, multiple))
         if plt.get_backend().lower() != 'agg':
             plt.show()
+        if save_path is not None:
+            plt.close(fig)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -417,21 +421,17 @@ def plot_boxplots_grid(errors_dict, settings_to_show, metric='ClassError', label
 def plot_violin_grid(errors_dict, settings_to_show, metric='AUC', labels=None,
                      dir=None, figsize=(12, 10), save_path=None, *, group_frames=False,
                      bayes_auc=None, show_bayes_auc=True):
-    """AUC violin-and-box comparison, one figure per setting.
+    """Violin-and-box comparison for any scalar metric, one figure per setting.
 
     Each method gets a full vertical violin in its group colour with a compact
     black boxplot inside it, following the box+violin idea without adding raw
     scatter points or a separate mean line. The line inside the inner box is the
-    median. Only AUC is drawn: pass another metric and the function skips with a
-    warning.
+    median. Works for AUC, Brier and ClassError; the Bayes AUC reference is
+    drawn only for AUC.
 
     With several settings, ``save_path`` gets the setting name added before the
     suffix (``auc_violin.png`` -> ``auc_violin_setting1.png``).
     """
-    if str(metric).upper() != 'AUC':
-        print(f'⚠️ violin plots are only produced for AUC — skipping {metric}')
-        return
-
     multiple = len(settings_to_show) > 1
 
     for setting in settings_to_show:
@@ -508,6 +508,8 @@ def plot_violin_grid(errors_dict, settings_to_show, metric='AUC', labels=None,
         _save_figure(fig, dir, _setting_filename(save_path, setting, multiple))
         if plt.get_backend().lower() != 'agg':
             plt.show()
+        if save_path is not None:
+            plt.close(fig)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -583,6 +585,8 @@ def plot_runtime_barplot_simple(errors_dict, settings_to_show, labels=None,
     _save_figure(fig, dir, save_path)
     if plt.get_backend().lower() != 'agg':
         plt.show()
+    if save_path is not None:
+        plt.close(fig)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -769,6 +773,8 @@ def plot_effect_forest(effect_frame, metrics=('AUC', 'Brier'), labels=None,
         _save_figure(fig, dir, name)
         if plt.get_backend().lower() != 'agg':
             plt.show()
+        if save_path is not None:
+            plt.close(fig)
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -895,3 +901,5 @@ def plot_gain_heatmap(gain_frame, metrics=('AUC', 'Brier'), labels=None,
         _save_figure(fig, dir, name)
         if plt.get_backend().lower() != 'agg':
             plt.show()
+        if save_path is not None:
+            plt.close(fig)

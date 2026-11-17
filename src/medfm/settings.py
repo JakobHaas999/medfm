@@ -8,7 +8,7 @@ def _make_settings():
 
     # ── Setting 1 ─────────────────────────────────────────
     S[1] = dict(
-        label='Setting 1: Small Sample, Low-Dimensional Gaussian',
+        label='Setting 1: Low-Dimensional Gaussian',
         n={'n1_tr': 100, 'n2_tr': 100, 'n1_te': 500, 'n2_te': 500},
         mu={'mu1': np.zeros(20), 'mu2': np.array([0.7]*10 + [0]*10)},
         sigma1=np.eye(20),
@@ -24,7 +24,7 @@ def _make_settings():
 
     # ── Setting 2 ─────────────────────────────────────────
     S[2] = dict(
-        label='Setting 2: Nonlinear Interactions with No Mean Shift',
+        label='Setting 2: Quadratic signal, no mean shift',
         n={'n1_tr': 100, 'n2_tr': 100, 'n1_te': 500, 'n2_te': 500},
         mu={'mu1': np.zeros(20), 'mu2': np.zeros(20)},
         sigma1=sig23_1, sigma2=sig23_2,
@@ -33,7 +33,7 @@ def _make_settings():
 
     # ── Setting 3 ─────────────────────────────────────────
     S[3] = dict(
-        label='Setting 3: Nonlinear Interactions with Sparse Linear Signal',
+        label='Setting 3: Mixed linear and quadratic signal',
         n={'n1_tr': 100, 'n2_tr': 100, 'n1_te': 500, 'n2_te': 500},
         mu={'mu1': np.zeros(20),
             'mu2': np.concatenate([np.ones(5), np.zeros(15)])},
@@ -53,7 +53,7 @@ def _make_settings():
 
     # ── Setting 5 ─────────────────────────────────────────
     S[5] = dict(
-        label='Setting 5: Heavy-Tailed Elliptical Distributions',
+        label='Setting 5: Heavy-Tailed t Distributions',
         n={'n1_tr': 100, 'n2_tr': 100, 'n1_te': 500, 'n2_te': 500},
         mu={'mu1': np.zeros(20), 'mu2': np.array([0.7]*10 + [0]*10)},
         sigma1=np.eye(20),
@@ -67,7 +67,7 @@ def _make_settings():
         for j in range(20):
             sig6_2[i, j] = 0.6 ** abs(i - j)
     S[6] = dict(
-        label='Setting 6: Heavy-Tailed with Exponential Covariance Decay',
+        label='Setting 6: Heavy-Tailed t with Exponential Covariance Decay',
         n={'n1_tr': 100, 'n2_tr': 100, 'n1_te': 500, 'n2_te': 500},
         mu={'mu1': np.zeros(20), 'mu2': np.array([0.7]*10 + [0]*10)},
         sigma1=np.eye(20), sigma2=sig6_2,
@@ -117,7 +117,7 @@ def _make_sensitivity():
     block2 = np.eye(20)
     sig_7p = block_diag(block1, block2)
     S['7+'] = dict(
-        label='Setting 7+ (Sensitivity, t-dist, block covariance)',
+        label='Setting 7+: Heavy-tailed t mixed linear and quadratic signal (p=40)',
         n={'n1_tr': 250, 'n2_tr': 250, 'n1_te': 500, 'n2_te': 500},
         mu={'mu1': np.zeros(40), 'mu2': np.array([0.7]*5 + [0]*35)},
         sigma1=sig_7p,

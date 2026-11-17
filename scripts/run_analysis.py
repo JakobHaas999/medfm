@@ -108,7 +108,6 @@ def main(argv=None):
     # Report existing results without loading data or fitting models.
     if args.analysis == 'report':
         from medfm.plot_functions import (
-            plot_boxplots_grid,
             plot_effect_forest,
             plot_gain_heatmap,
             plot_roc_curves_grid,
@@ -154,13 +153,12 @@ def main(argv=None):
         gain = None
         if baseline is not None:
             gain = build_gain_table(
-                load_fixed(baseline_files), load_fixed(sensitivity_files), metrics=METRICS,
+                load_fixed(baseline_files), load_fixed(sensitivity_files),
                 filename='sample_size_changes.csv', tables_dir=table_dir,
             )
         plots = str(plot_dir) + '/'
-        plot_boxplots_grid(results, names, labels=labels, metric='AUC', dir=plots, save_path='auc_box.png', bayes_auc=bayes, show_bayes_auc=not args.no_bayes_auc)
         plot_violin_grid(results, names, labels=labels, metric='AUC', dir=plots, save_path='auc_violin.png', bayes_auc=bayes, show_bayes_auc=not args.no_bayes_auc)
-        plot_boxplots_grid(results, names, labels=labels, metric='Brier', dir=plots, save_path='brier_box.png')
+        plot_violin_grid(results, names, labels=labels, metric='Brier', dir=plots, save_path='brier_violin.png')
         plot_roc_curves_grid(results, names, labels=labels, dir=plots, save_path='roc.png', bayes_auc=bayes, show_bayes_roc=not args.no_bayes_roc)
         plot_runtime_barplot_simple(results, names, labels=labels, dir=plots, save_path='runtime.png')
         if effect is not None:

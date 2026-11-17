@@ -1,5 +1,5 @@
 {
-  "label": "Setting 1: Small Sample, Low-Dimensional Gaussian",
+  "label": "Setting 1: Low-Dimensional Gaussian",
   "n": {
     "n1_tr": 100,
     "n2_tr": 100,

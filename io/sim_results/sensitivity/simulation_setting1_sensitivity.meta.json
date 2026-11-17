@@ -1,5 +1,5 @@
 {
-  "label": "Setting 1: Small Sample, Low-Dimensional Gaussian (Sensitivity)",
+  "label": "Setting 1: Low-Dimensional Gaussian (Sensitivity)",
   "n": {
     "n1_tr": 250,
     "n2_tr": 250,

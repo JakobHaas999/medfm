@@ -1,5 +1,5 @@
 {
-  "label": "Setting 6: Heavy-Tailed with Exponential Covariance Decay (Sensitivity)",
+  "label": "Setting 6: Heavy-Tailed t with Exponential Covariance Decay (Sensitivity)",
   "n": {
     "n1_tr": 250,
     "n2_tr": 250,

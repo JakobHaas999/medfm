@@ -138,11 +138,13 @@ uv run --locked python scripts/run_analysis.py report --results io/real_data_res
 Reports save `tables/` and `plots/` inside the selected results directory. The
 same command works for a saved pilot directory.
 
-Tables are `measures.csv` (per-method mean ± SD), `best_methods.csv` (best and
-second-best per group), and `best_vs_best.csv` (the best tree and best foundation
-per measure, their mean values, and the paired foundation-minus-tree effect).
-When `--baseline` is given, `sample_size_changes.csv` adds the sensitivity-minus-main
-gain per method.
+Tables are `measures.csv` (per-method mean ± SD with Monte Carlo SE),
+`best_methods.csv` (best and second-best per group, each with its MCSE), and
+`best_vs_best.csv` (the best tree and best foundation per measure, their mean
+values, and the paired foundation-minus-tree effect with its MCSE).
+When `--baseline` is given, `sample_size_changes.csv` reports the sensitivity-minus-main
+change in the mean for AUC, Brier and ClassError only; no change-in-MCSE table is
+produced. Both `gain_AUC.png` and `gain_Brier.png` are saved in `plots/`.
 
 
 
