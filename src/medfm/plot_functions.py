@@ -85,36 +85,17 @@ DISPLAY_NAMES = {
 # the legends short stops the three boxes from running past the figure edges.
 LEGEND_MAX_ROWS = 3
 
-# Fallback colours for forest-plot comparison methods that are not in the
-# main colour scheme. Known methods reuse their colour from every other plot,
-# so a legend entry such as "TabPFN 3.5 vs best tree" always means the same
-# method here as it does in the box and ROC plots.
+# Fallback colours for comparison methods that are not in the main colour
+# scheme. Known methods always reuse their exact colour from every other plot.
 COMPARISON_COLORS = ['#1B5E9A', '#D95F59']
-
-# The forest comparison uses the same palette as every other plot. Keyed by
-# method family rather than rank, so a method keeps its colour when it moves
-# between first and second place. The darkest TabPFN blue and the teal assigned
-# to TabICL above give the two half violins enough separation.
-FOREST_COLORS = {
-    'TabPFN': COLOR_SCHEME['TabPFN_v35'],
-    'TabICL': COLOR_SCHEME['TabICL-V1'],
-}
-
-
-def _forest_color(method, index=None):
-    """High-contrast forest colour, still tied to the method rather than rank."""
-    for prefix, color in FOREST_COLORS.items():
-        if str(method).startswith(prefix):
-            return color
-    return _comparison_color(method, index)
 
 
 def _comparison_color(method, index=None):
-    """Colour one comparison by its foundation method, with a fallback.
+    """Colour one comparison by its method, with a stable fallback.
 
-    Known methods always reuse their colour from the other plots. An unknown
-    method uses a stable fallback index derived from the method order, never
-    the rank it happens to hold in one setting.
+    Known methods reuse their colour from the violin/box plots, ROC curves and
+    runtime bars. An unknown method uses a fallback index derived from the
+    method order, never the rank it happens to hold in one setting.
     """
     if method in COLOR_SCHEME:
         return COLOR_SCHEME[method]
@@ -122,6 +103,17 @@ def _comparison_color(method, index=None):
         index = (FOUNDATION_METHODS.index(method)
                  if method in FOUNDATION_METHODS else 0)
     return COMPARISON_COLORS[index % len(COMPARISON_COLORS)]
+
+
+def _forest_color(method, index=None):
+    """Use the same per-method colour as the violin/box plots.
+
+    The forest plot used to collapse all TabPFN methods to one blue and all
+    TabICL methods to one teal. That worked for the two-model headline view but
+    makes the all-foundations view ambiguous, so each method now keeps its own
+    colour everywhere in the report.
+    """
+    return _comparison_color(method, index)
 
 
 def _setting_filename(save_path, setting, multiple):
@@ -607,31 +599,55 @@ def _half_violin_side(method, index=0):
 
 
 def plot_effect_forest(effect_frame, metrics=('AUC', 'Brier'), labels=None,
-                       dir=None, figsize=None, save_path=None, effect_samples=None):
-    """Compare the two foundation models with the best tree, one plot per metric.
+                       dir=None, figsize=None, save_path=None, effect_samples=None,
+                       n_foundation=2):
+    """Compare top foundation models with the best tree, one plot per metric.
 
-    ``effect_frame`` is the raw table from ``build_effect_table`` with a
-    ``(Setting, Metric)`` index and columns ``Mean effect``, ``SD effect``,
-    ``Foundation rank``, ``Tree method`` and ``Foundation method``. Rank 1 is
-    the best foundation model and rank 2 the runner-up; both use the same best
-    tree method.
+    ``n_foundation`` controls how many top-performing foundation models (ranked
+    per setting/metric) are compared against the single best tree: ``2`` (default)
+    shows the best two, ``3`` the top three, and ``0`` shows every available
+    foundation model. To build effect data for a custom count, pass
+    ``n_foundation`` to ``build_effect_table`` / ``build_effect_samples`` and
+    provide the results here. For convenience, ``effect_frame`` may also be an
+    ``errors_dict`` mapping setting IDs to result DataFrames; the table and
+    paired samples are then built automatically for ``n_foundation``.
 
-    When ``effect_samples`` is supplied (from ``build_effect_samples``), each
-    setting shows two paired-difference half violins instead of point-plus-SD
-    marks: TabPFN above the setting row, TabICL below it, and a black line at
-    each mean. Without samples, the older mean/SD errorbar view is retained for
-    legacy callers. The two series use deliberately different colours keyed to
-    the foundation method family, never to rank. Legend entries read
-    "TabPFN 3.5 - best tree" to make the subtraction direction explicit,
-    and a line handle names the black mean marker. A dashed line at 0 marks
-    "no difference"; values to the right mean the foundation scored higher.
+    When paired samples are available, each comparison is drawn as an upward
+    half violin of foundation-minus-tree differences with a black line at the
+    mean. If samples are unavailable, a mean/SD errorbar view is used. The left
+    axis names each setting; the right axis has one labelled row per selected
+    foundation comparison and names the best tree ensemble for that setting.
+    If different settings select different top models, only that setting's
+    selected models get rows, so no empty rows are added. Each method uses the
+    same colour as in the violin/box plots. The legend only identifies the mean
+    paired effect. A dashed line at 0 marks no difference.
 
-    Tables saved before the rank column was added still work: rows are ordered
-    by stored rank. With several metrics, ``save_path`` gets the metric name
-    added before the suffix (``forest.png`` -> ``forest_AUC.png``).
+    With several metrics, ``save_path`` gets the metric name added before the
+    suffix (``forest.png`` -> ``forest_AUC.png``).
     """
+    # Convenience: build effect table/samples directly from results.
+    if isinstance(effect_frame, dict) and not hasattr(effect_frame, 'xs'):
+        errors_dict = effect_frame
+        try:
+            from .table_functions import build_effect_table as _build_effect_table
+            from .table_functions import build_effect_samples as _build_effect_samples
+        except ImportError:
+            from medfm.table_functions import build_effect_table as _build_effect_table
+            from medfm.table_functions import build_effect_samples as _build_effect_samples
+        if isinstance(metrics, str):
+            metrics = [metrics]
+        effect_obj = _build_effect_table(errors_dict, metrics=metrics, filename=None,
+                                         n_foundation=n_foundation)
+        if effect_obj is None:
+            return
+        effect_samples = _build_effect_samples(errors_dict, metrics=metrics,
+                                               n_foundation=n_foundation)
+        effect_frame = getattr(effect_obj, 'data', effect_obj)
+
     if effect_frame is None or getattr(effect_frame, 'empty', True):
         return
+    # Accept a Styler from build_effect_table as well as a raw DataFrame.
+    effect_frame = getattr(effect_frame, 'data', effect_frame)
     if isinstance(metrics, str):
         metrics = [metrics]
     base = Path(save_path) if save_path else None
@@ -648,7 +664,6 @@ def plot_effect_forest(effect_frame, metrics=('AUC', 'Brier'), labels=None,
         if 'Foundation rank' not in work.columns:
             work['Foundation rank'] = work.groupby(level=0).cumcount() + 1
         settings = list(dict.fromkeys(work.index))
-        centers = {setting: index for index, setting in enumerate(settings)}
 
         records = []
         for setting, row in work.iterrows():
@@ -668,102 +683,134 @@ def plot_effect_forest(effect_frame, metrics=('AUC', 'Brier'), labels=None,
         if not records:
             continue
 
-        # Group by method, not by rank: a method that moves between first and
-        # second place keeps its colour and its own legend entry.
-        present = {record['method'] for record in records}
-        methods = [m for m in FOUNDATION_METHODS if m in present]
-        methods += sorted(present.difference(methods))
-        first_rank = {m: min(r['rank'] for r in records if r['method'] == m)
-                      for m in methods}
-        method_order = {m: index for index, m in enumerate(methods)}
-        methods.sort(key=lambda m: (first_rank[m], method_order[m]))
+        # Each setting can have a different best tree and different top
+        # foundation models. Keep only the methods actually selected in that
+        # setting, but order them like the violin/box plots.
+        def _ordered_methods(names):
+            ordered = [m for m in FOUNDATION_METHODS if m in names]
+            ordered.extend(sorted(set(names).difference(ordered)))
+            return ordered
+
+        methods_by_setting = {}
+        for record in records:
+            methods_by_setting.setdefault(record['setting'], set()).add(record['method'])
+        methods_by_setting = {
+            setting: _ordered_methods(names)
+            for setting, names in methods_by_setting.items()
+        }
+        settings = [setting for setting in settings if setting in methods_by_setting]
+        present = {m for names in methods_by_setting.values() for m in names}
+        methods = _ordered_methods(present)
         color_index = {
             method: (FOUNDATION_METHODS.index(method)
                      if method in FOUNDATION_METHODS else len(FOUNDATION_METHODS) + index)
             for index, method in enumerate(methods)
         }
-        offsets = {method: offset for method, offset in zip(
-            methods, (np.arange(len(methods)) - (len(methods) - 1) / 2) * 0.34)}
+        selected_pairs = list(dict.fromkeys(
+            (record['setting'], record['method']) for record in records
+        ))
 
-        # Collect the paired differences before drawing anything. A partial set
-        # falls back to the summary view rather than leaving empty violin rows.
+        # Collect paired differences; a partial set falls back to mean/SD view.
         sample_values = {}
         candidate = effect_samples
         if (candidate is not None and not getattr(candidate, 'empty', True)
                 and {'Setting', 'Foundation method', 'Effect'}.issubset(candidate.columns)):
             if 'Metric' in candidate.columns:
                 candidate = candidate[candidate['Metric'] == metric]
-            for method in methods:
-                for setting in settings:
-                    values = candidate.loc[
-                        (candidate['Setting'] == setting)
-                        & (candidate['Foundation method'] == method), 'Effect'
-                    ]
-                    values = pd.to_numeric(values, errors='coerce')
-                    values = values.replace([np.inf, -np.inf], np.nan).dropna()
-                    if len(values) >= 2:
-                        sample_values[(method, setting)] = values.to_numpy()
-        use_violins = len(sample_values) == len(methods) * len(settings)
+            for setting, method in selected_pairs:
+                values = candidate.loc[
+                    (candidate['Setting'] == setting)
+                    & (candidate['Foundation method'] == method), 'Effect'
+                ]
+                values = pd.to_numeric(values, errors='coerce')
+                values = values.replace([np.inf, -np.inf], np.nan).dropna()
+                if len(values) >= 2:
+                    sample_values[(setting, method)] = values.to_numpy()
+        use_violins = len(sample_values) == len(selected_pairs)
 
-        fig, ax = plt.subplots(figsize=figsize or (10, max(3.0, 0.7 * len(settings) + 1.6)))
+        # One row per selected (setting, foundation model) pair. The left axis
+        # groups rows by setting; the right axis names each pair and its tree.
+        best_tree = {}
+        for record in records:
+            if record['tree']:
+                best_tree.setdefault(record['setting'], record['tree'])
+
+        row_positions, row_labels, left_ticks, left_labels = [], [], [], []
+        row_index = {}
+        position = 0
+        for setting in settings:
+            start = position
+            tree_name = best_tree.get(setting, 'best tree')
+            tree_display = DISPLAY_NAMES.get(tree_name, tree_name)
+            for method in methods_by_setting[setting]:
+                row_index[(setting, method)] = position
+                row_positions.append(position)
+                row_labels.append(f'{DISPLAY_NAMES.get(method, method)} vs {tree_display}')
+                position += 1
+            left_ticks.append((start + position - 1) / 2)
+            left_labels.append(_title(setting, labels))
+
+        fig_h = figsize[1] if figsize else max(3.0, 0.48 * len(row_positions) + 1.8)
+        fig_w = figsize[0] if figsize else 11
+        fig, ax = plt.subplots(figsize=(fig_w, fig_h))
         ax.axvline(0.0, color='black', linestyle='--', linewidth=1.2, zorder=1)
-        legend_handles = []
 
         if use_violins:
-            for index, method in enumerate(methods):
+            for setting, method in selected_pairs:
                 color = _forest_color(method, color_index[method])
-                side = _half_violin_side(method, index)
-                for setting in settings:
-                    parts = ax.violinplot(
-                        [sample_values[(method, setting)]],
-                        positions=[centers[setting]], orientation='horizontal',
-                        side=side, widths=0.34, points=100,
-                        showmeans=True, showmedians=False, showextrema=False,
-                    )
-                    body = parts['bodies'][0]
-                    body.set_facecolor(color)
-                    body.set_edgecolor(color)
-                    body.set_alpha(0.75)
-                    body.set_zorder(2)
-                    parts['cmeans'].set_color('black')
-                    parts['cmeans'].set_linewidth(2.2)
-                    parts['cmeans'].set_zorder(4)
-                legend_handles.append(Patch(
-                    facecolor=color, edgecolor=color, alpha=0.75,
-                    label=f'{DISPLAY_NAMES.get(method, method)} - best tree',
-                ))
-            legend_handles.append(Line2D(
-                [0], [0], color='black', linewidth=2.2,
-                label='Mean paired effect',
-            ))
+                parts = ax.violinplot(
+                    [sample_values[(setting, method)]],
+                    positions=[row_index[(setting, method)]],
+                    orientation='horizontal', side='low', widths=0.75, points=100,
+                    showmeans=True, showmedians=False, showextrema=False,
+                )
+                body = parts['bodies'][0]
+                body.set_facecolor(color)
+                body.set_edgecolor(color)
+                body.set_alpha(0.75)
+                body.set_zorder(2)
+                parts['cmeans'].set_color('black')
+                parts['cmeans'].set_linewidth(2.0)
+                parts['cmeans'].set_zorder(4)
         else:
-            for index, method in enumerate(methods):
-                selected = [r for r in records if r['method'] == method]
-                color = _forest_color(method, color_index[method])
+            for record in records:
+                color = _forest_color(record['method'], color_index[record['method']])
                 ax.errorbar(
-                    [r['effect'] for r in selected],
-                    [centers[r['setting']] + offsets[method] for r in selected],
-                    xerr=[r['sd'] for r in selected], fmt='o', color=color, ecolor=color,
+                    [record['effect']],
+                    [row_index[(record['setting'], record['method'])]],
+                    xerr=[record['sd']], fmt='o', color=color, ecolor=color,
                     elinewidth=1.4, capsize=4, markersize=7, markeredgecolor='black',
                     markeredgewidth=0.8, zorder=3,
                 )
-                legend_handles.append(Line2D(
-                    [0], [0], color=color, marker='o', linestyle='none',
-                    markersize=7, markeredgecolor='black',
-                    label=f'{DISPLAY_NAMES.get(method, method)} - best tree',
-                ))
 
-        y = np.arange(len(settings))
-        ax.set_yticks(y)
-        ax.set_yticklabels([_title(setting, labels) for setting in settings], fontsize=11)
+        # The legend only identifies the black mean marker; method names are on
+        # the right axis next to their own row.
+        legend_handles = [Line2D(
+            [0], [0], color='black', linewidth=2.0 if use_violins else 1.4,
+            marker='o' if not use_violins else None, markersize=7 if not use_violins else 6,
+            label='Mean paired effect',
+        )]
+
+        ax.set_yticks(left_ticks)
+        ax.set_yticklabels(left_labels, fontsize=11)
+        ax2 = ax.twinx()
+        ax2.set_ylim(ax.get_ylim())
+        ax2.set_yticks(row_positions)
+        ax2.set_yticklabels(row_labels, fontsize=10)
+        ax2.set_ylabel('Foundation model (vs best tree)', fontsize=11)
+        ax2.margins(y=0.08)
         ax.set_xlabel(f'Paired effect on {metric} (foundation - tree)', fontsize=12)
-        ax.set_title(f'2 foundation models versus best tree — {metric}', fontsize=13, pad=12)
+        ax.set_title(
+            f'Paired {metric} effect for Foundation models versus best tree ensemble',
+            fontsize=13, pad=12,
+        )
         ax.grid(axis='x', alpha=0.3)
-        ax.margins(x=0.25, y=0.28 if use_violins else 0.18)
+        ax.margins(x=0.25, y=0.08)
         ax.invert_yaxis()
-        if len(legend_handles) > 1:
-            ax.legend(handles=legend_handles, loc='best', fontsize=9,
-                      frameon=True, framealpha=1)
+        ax2.set_ylim(ax.get_ylim())
+        legend_loc = {'AUC': 'upper right', 'BRIER': 'upper left'}.get(metric.upper(), 'best')
+        ax2.legend(handles=legend_handles, loc=legend_loc, fontsize=9,
+                   frameon=True, framealpha=1)
 
         fig.tight_layout()
 

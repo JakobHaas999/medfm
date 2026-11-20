@@ -142,14 +142,23 @@ def main(argv=None):
         labels = read_labels({name: str(path) for name, path in files.items()})
         bayes = read_bayes_auc(files) if not (args.no_bayes_auc and args.no_bayes_roc) else {}
         names = list(results)
+        # Real-data reports show every available foundation model against the
+        # best tree ensemble. Simulation reports keep the two-model headline
+        # comparison used in the paper.
+        is_real_data = any(str(name).startswith('realdata_') for name in files)
+        n_foundation = 0 if is_real_data else 2
+        if is_real_data:
+            print('Real-data report: showing all foundation models versus best tree ensemble')
         table_dir = args.results / 'tables'
         plot_dir = args.results / 'plots'
         table_dir.mkdir(exist_ok=True)
         plot_dir.mkdir(exist_ok=True)
         build_measures_table(results, filename='measures.csv', tables_dir=table_dir)
         build_best_methods_table(results, filename='best_methods.csv', tables_dir=table_dir)
-        effect = build_effect_table(results, filename='best_vs_best.csv', tables_dir=table_dir)
-        effect_samples = build_effect_samples(results, metrics=METRICS)
+        effect = build_effect_table(results, filename='best_vs_best.csv', tables_dir=table_dir,
+                                    n_foundation=n_foundation)
+        effect_samples = build_effect_samples(results, metrics=METRICS,
+                                             n_foundation=n_foundation)
         gain = None
         if baseline is not None:
             gain = build_gain_table(
@@ -163,7 +172,8 @@ def main(argv=None):
         plot_runtime_barplot_simple(results, names, labels=labels, dir=plots, save_path='runtime.png')
         if effect is not None:
             plot_effect_forest(effect.data, effect_samples=effect_samples,
-                               dir=plots, save_path='forest.png')
+                               labels=labels, dir=plots, save_path='forest.png',
+                               n_foundation=n_foundation)
         if gain is not None:
             base_rows = training_rows(next(iter(baseline_files.values())))
             sens_rows = training_rows(next(iter(sensitivity_files.values())))

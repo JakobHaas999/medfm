@@ -409,7 +409,7 @@ def run_catboost(X_train, X_test, y_train, y_test, X_train_sub, y_train_sub, X_v
 ################################################################################
 # QDA
 def run_qda(X_train, X_test, y_train, y_test, X_train_sub, y_train_sub, X_val, y_val, random_state=None):
-    """Scale explicitly, tune QDA regularization, fit once, and return metrics/times."""
+    """ QDA per-class covariance estimates regularization, fit once, and return metrics/times."""
 
     # setup
     setup_start = perf_counter()

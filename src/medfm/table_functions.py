@@ -247,47 +247,50 @@ def build_best_methods_table(errors_dict, metrics=None, filename='best_methods.c
     )
 
 
-def _effect_pairs(df, metric, all_models=False):
+def _effect_pairs(df, metric, all_models=False, n_foundation=2):
     """Select (rank, foundation method, tree method) pairs for one measure.
 
-    The two headline comparisons use one shared best tree method, so the only
-    difference between them is the foundation method. ``all_models`` adds the
-    remaining foundation models and the remaining tree models for diagnostics.
+    Compare the top ``n_foundation`` foundation models against the single best
+    tree method (ranked on this metric/setting). Use ``n_foundation=0`` to
+    include all available foundation models. ``all_models`` keeps the legacy
+    diagnostics: all foundation models versus the best tree plus the best
+    foundation versus every other tree method.
     """
     tree = _rank_methods(df, TREE_METHODS, metric)
     foundation = _rank_methods(df, FOUNDATION_METHODS, metric)
     if not tree or not foundation:
         return []
 
+    n = len(foundation) if n_foundation == 0 else min(max(n_foundation, 0), len(foundation))
     pairs = [(rank, method, tree[0])
-             for rank, method in enumerate(foundation[:2], start=1)]
+             for rank, method in enumerate(foundation[:n], start=1)]
     if all_models:
         pairs += [(rank, method, tree[0])
-                  for rank, method in enumerate(foundation[2:], start=3)]
+                  for rank, method in enumerate(foundation[n:], start=n + 1)]
         pairs += [(1, foundation[0], method) for method in tree[1:]]
     return pairs
 
 
-def build_effect_table(errors_dict, metrics=None, filename='best_vs_best.csv', tables_dir=None, all_models=False):
+def build_effect_table(errors_dict, metrics=None, filename='best_vs_best.csv', tables_dir=None, all_models=False, n_foundation=2):
     """Summarize within-run differences, foundation minus tree, as mean, SD, and MCSE.
 
     Baseline methods are excluded from this head-to-head comparison. Select the
-    best tree method and the best two foundation methods once per measure using
-    all repetitions. Each setting/measure then has one row per foundation: the
-    best foundation against the best tree (rank 1) and the second-best foundation
-    against the same best tree (rank 2). ``Foundation rank`` identifies the row
-    so both effects can be drawn as separate series. A positive mean effect means
-    the foundation model scored higher; for Brier and ClassError lower is better,
-    so a negative effect favors the foundation model. With all_models=True,
-    compare every model with the best method in the other comparison group.
-    Calibration effects use raw slopes/intercepts, not their distances.
+    best tree method and the top ``n_foundation`` foundation methods once per
+    measure using all repetitions (``n_foundation=0`` uses every available
+    foundation model). Each setting/measure gets one row per selected foundation
+    compared against the same best tree. ``Foundation rank`` identifies the row
+    so effects can be drawn as separate series. A positive mean effect means the
+    foundation model scored higher; for Brier and ClassError lower is better, so
+    a negative effect favors the foundation model. With all_models=True, compare
+    every model with the best method in the other comparison group. Calibration
+    effects use raw slopes/intercepts, not their distances.
     """
     metrics = metrics or METRICS
     rows = []
     for sid, df in errors_dict.items():
         for metric in metrics:
             for foundation_rank, foundation_method, tree_method in _effect_pairs(
-                    df, metric, all_models=all_models):
+                    df, metric, all_models=all_models, n_foundation=n_foundation):
                 foundation_values = _numeric(df[f'{foundation_method}_{metric}'])
                 tree_values = _numeric(df[f'{tree_method}_{metric}'])
                 # Keep the original repetition indices: a missing value in one
@@ -316,20 +319,22 @@ def build_effect_table(errors_dict, metrics=None, filename='best_vs_best.csv', t
     }, na_rep='—')
 
 
-def build_effect_samples(errors_dict, metrics=None, filename=None, tables_dir=None):
+def build_effect_samples(errors_dict, metrics=None, filename=None, tables_dir=None, n_foundation=2):
     """Per-run foundation-minus-tree differences for the headline comparisons.
 
     ``build_effect_table`` collapses the paired differences to a mean and SD.
     The half-violin forest needs the differences themselves, so this keeps one
     row per repetition with the setting, metric, foundation method, tree method
     and signed effect. Method names stay as stored result keys so plots can look
-    up their colours. Set ``filename`` to also save the long table as a CSV.
+    up their colours. Use ``n_foundation=0`` to include all available foundation
+    models (otherwise the top ``n_foundation``). Set ``filename`` to also save
+    the long table as a CSV.
     """
     metrics = metrics or METRICS
     rows = []
     for sid, df in errors_dict.items():
         for metric in metrics:
-            for foundation_rank, foundation_method, tree_method in _effect_pairs(df, metric):
+            for foundation_rank, foundation_method, tree_method in _effect_pairs(df, metric, n_foundation=n_foundation):
                 foundation_values = pd.to_numeric(df[f'{foundation_method}_{metric}'], errors='coerce')
                 tree_values = pd.to_numeric(df[f'{tree_method}_{metric}'], errors='coerce')
                 paired = pd.DataFrame({'Foundation': foundation_values, 'Tree': tree_values})

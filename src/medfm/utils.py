@@ -280,8 +280,33 @@ def discover_real(real_dir):
                    key=lambda p: _natural_key(os.path.basename(p)))
     return {f'D{i}': f for i, f in enumerate(files, 1)}
 
+
+# Short labels for the case-study datasets. The stored dataset keys stay in the
+# CSV/meta files; only report axes use these readable names.
+REAL_DATA_LABELS = {
+    'case_study_1_echo_notes': 'Case study 1 — Echo notes',
+    'case_study_2_blood_glucose_management_1': 'Case study 2 — Blood glucose',
+    'case_study_3_blood_gas_oximetry': 'Case study 3 — Blood gas',
+}
+
+
+def _nice_real_label(value):
+    """Human-readable label for a stored real-data dataset key."""
+    if not isinstance(value, str):
+        return value
+    if value in REAL_DATA_LABELS:
+        return REAL_DATA_LABELS[value]
+    # Generic fallback for new datasets: keep the case-study number and turn
+    # underscores into spaces instead of printing a long raw identifier.
+    return re.sub(r'^case_study_(\d+)_', r'Case study \1 — ', value).replace('_', ' ').strip()
+
+
 def read_labels(files):
-    """Read plot labels from the metadata files stored beside result CSV files."""
+    """Read plot labels from the metadata files stored beside result CSV files.
+
+    Real-data ``dataset`` keys are shortened for report axes; explicit meta
+    ``label`` values and simulation setting labels are kept unchanged.
+    """
     import json
     out = {}
     for sid, path in files.items():
@@ -290,7 +315,10 @@ def read_labels(files):
         if os.path.exists(meta_path):
             with open(meta_path) as fh:
                 m = json.load(fh)
-            label = m.get('label') or m.get('dataset') or sid
+            if m.get('label'):
+                label = m['label']
+            elif m.get('dataset'):
+                label = _nice_real_label(m['dataset'])
         out[sid] = label
     return out
     
