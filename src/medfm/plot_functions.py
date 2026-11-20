@@ -1,6 +1,7 @@
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch, Rectangle
+from matplotlib.transforms import blended_transform_factory
 from pathlib import Path
 import numpy as np
 import pandas as pd
@@ -508,9 +509,9 @@ def plot_violin_grid(errors_dict, settings_to_show, metric='AUC', labels=None,
 # ─────────────────────────────────────────────────────────────────────
 # Runtime barplot (stacked by phase)
 # ─────────────────────────────────────────────────────────────────────
-# Each bar is split into the runner's timing phases. "Other" is the part of
-# the total wall-clock time not covered by the four measured phases (for
-# example the ROC/Brier computation after prediction). Use a colour-blind safe
+# Each bar is split into the four measured timing phases. Any remaining
+# wall-clock time is not shown as a separate category; the Total row and the
+# label above each bar report the full mean runtime. Use a colour-blind safe
 # palette with a distinct hue per phase; shades of one blue are hard to tell
 # apart once the bars are stacked.
 TIME_PHASES = [
@@ -518,18 +519,22 @@ TIME_PHASES = [
     ('TuneTime', 'Tune', '#E69F00'),
     ('FitTime', 'Fit', '#009E73'),
     ('PredictTime', 'Predict', '#CC79A7'),
-    ('Other', 'Other', '#999999'),
 ]
 _TIME_KEYS = ['SetupTime', 'TuneTime', 'FitTime', 'PredictTime']
 
 
 def plot_runtime_barplot_simple(errors_dict, settings_to_show, labels=None,
-                                dir=None, figsize=(12, 7), save_path=None):
-    """Stack each model's mean runtime into setup, tune, fit, predict, and other.
+                                dir=None, figsize=(12, 7), save_path=None,
+                                table=True):
+    """Stack each model's mean runtime into setup, tune, fit, and predict.
 
     Timings are pooled across the selected settings. One bar per method, with
     the measured phases stacked bottom to top and the total wall-clock time
     printed above each bar. This is one summary plot, not a grid.
+
+    With ``table=True`` (the default), a table of mean seconds is drawn below
+    the bars. It uses the same method order and x positions as the bars, so
+    each column sits under its corresponding bar.
     """
     methods = METHOD_ORDER
     pooled = {m: {'Time': [], **{key: [] for key in _TIME_KEYS}} for m in methods}
@@ -546,21 +551,31 @@ def plot_runtime_barplot_simple(errors_dict, settings_to_show, labels=None,
     if not methods:
         return
 
-    fig, ax = plt.subplots(figsize=figsize)
+    if table:
+        fig, (ax, ax_table) = plt.subplots(
+            2, 1, figsize=(figsize[0], figsize[1] + 2.2),
+            gridspec_kw={'height_ratios': [3, 2]},
+        )
+    else:
+        fig, ax = plt.subplots(figsize=figsize)
+        ax_table = None
+
     x = _grouped_axis(ax, methods)
     bottoms = np.zeros(len(methods))
+    phase_values = {}
+    totals = np.array([np.mean(pooled[m]['Time']) for m in methods])
 
     for key, label, color in TIME_PHASES:
         heights = np.array([
-            max(np.mean(pooled[m]['Time']) - sum(np.mean(pooled[m][k]) for k in _TIME_KEYS), 0.0)
-            if key == 'Other' else np.mean(pooled[m][key])
+            np.mean(pooled[m][key]) if pooled[m][key] else 0.0
             for m in methods
         ])
+        phase_values[key] = heights
         ax.bar(x, heights, bottom=bottoms, color=color, edgecolor='black',
                linewidth=0.6, alpha=0.95, label=label)
         bottoms += heights
 
-    for i, total in enumerate(bottoms):
+    for i, total in enumerate(totals):
         ax.text(x[i], total, f'{total:.0f}s', ha='center', va='bottom',
                 fontsize=10, fontweight='bold')
 
@@ -568,11 +583,50 @@ def plot_runtime_barplot_simple(errors_dict, settings_to_show, labels=None,
     ax.set_xticklabels([DISPLAY_NAMES.get(m, m) for m in methods],
                        rotation=25, ha='right', fontsize=11)
     ax.set_ylabel('Average runtime (seconds)', fontsize=13)
-    ax.set_title('Mean Runtime per Method by Phase', fontsize=14, pad=30)
+    ax.set_title('Average runtime over all settings per method per phase',
+                 fontsize=14, pad=30)
     ax.margins(y=0.18)
+    # Leave explicit headroom above the tallest bar so its total-seconds label
+    # stays inside the axes; ax.margins() alone is ignored after the bars are
+    # already autoscale-locked in some Matplotlib versions.
+    y_top = max(float(np.max(totals)), 1.0)
+    ax.set_ylim(0.0, y_top * 1.18)
     ax.grid(axis='y', alpha=0.3, color='#b0b0b0')
     ax.legend(title='Phase', loc='upper right', fontsize=10, title_fontsize=10,
               frameon=True, framealpha=1)
+
+    if ax_table is not None:
+        ax_table.set_xlim(ax.get_xlim())
+        ax_table.set_ylim(-0.5, len(TIME_PHASES) + 0.5)
+        ax_table.invert_yaxis()
+
+        rows = [(label, phase_values[key]) for key, label, _ in TIME_PHASES]
+        rows.append(('Total', totals))
+        label_transform = blended_transform_factory(ax_table.transAxes,
+                                                    ax_table.transData)
+        for row, (label, values) in enumerate(rows):
+            # Match each table row to its bar colour. The Total row uses a
+            # neutral tint because it is a sum, not a phase.
+            if row < len(TIME_PHASES):
+                row_color = TIME_PHASES[row][2]
+                ax_table.axhspan(row - 0.5, row + 0.5, color=row_color,
+                                 alpha=0.22, zorder=0)
+            else:
+                # Total has no phase colour; leave the row unshaded.
+                row_color = 'black'
+            ax_table.text(-0.01, row, label, transform=label_transform,
+                          ha='right', va='center', fontsize=9, fontweight='bold',
+                          color=row_color)
+            for xi, value in zip(x, values):
+                ax_table.text(xi, row, f'{value:.1f}', ha='center', va='center',
+                              fontsize=9)
+        for row in range(len(rows) + 1):
+            ax_table.axhline(row - 0.5, color='#cccccc', linewidth=0.7, zorder=1)
+
+        ax_table.set_xticks([])
+        ax_table.set_yticks([])
+        for spine in ax_table.spines.values():
+            spine.set_visible(False)
     fig.tight_layout()
 
     _save_figure(fig, dir, save_path)
@@ -585,37 +639,54 @@ def plot_runtime_barplot_simple(errors_dict, settings_to_show, labels=None,
 # ─────────────────────────────────────────────────────────────────────
 # Forest plot of the best-vs-best (foundation minus tree) effect
 # ─────────────────────────────────────────────────────────────────────
-# Short names for the forest y-axis. The full setting descriptions stay in the
-# metadata and other plot titles; only these compact labels go on the axis.
-# Each is at most three words so the nine sensitivity rows stay readable.
-SHORT_SETTING_LABELS = {
-    'simulation_setting1': 'Low-dim Gaussian',
-    'simulation_setting2': 'Quadratic signal',
-    'simulation_setting3': 'Linear + quadratic',
-    'simulation_setting4': 'Class imbalance',
-    'simulation_setting5': 'Heavy-tailed t',
-    'simulation_setting6': 'Exp covariance decay',
-    'simulation_setting7+': 'Heavy-tail mix (p=40)',
-    'simulation_setting7': 'Sparse Gaussian (p=40)',
-    'simulation_setting8': 'Sparse Gaussian (p=100)',
-}
+def _setting_number(setting):
+    """Return ``(number, is_plus)`` from a setting ID, or ``None``.
 
-
-def _short_forest_label(setting, labels=None):
-    """Compact y-axis name for a simulation setting in the forest plot."""
+    Handles saved IDs such as ``simulation_setting7+_sensitivity`` and short
+    notebook IDs such as ``S7+``.
+    """
     key = str(setting)
     if key.endswith('_sensitivity'):
         key = key[:-len('_sensitivity')]
-    short_id = re.fullmatch(r'S(\d+\+?)', key)
-    if short_id:
-        key = f'simulation_setting{short_id.group(1)}'
-    if key in SHORT_SETTING_LABELS:
-        return SHORT_SETTING_LABELS[key]
+    match = re.fullmatch(r'(?:simulation_setting|S)(\d+\+?)', key,
+                         flags=re.IGNORECASE)
+    if not match:
+        return None
+    number = re.fullmatch(r'(\d+)(\+)?', match.group(1))
+    if not number:
+        return None
+    return int(number.group(1)), bool(number.group(2))
+
+
+def _setting_order_key(setting):
+    """Sort settings numerically, placing ``7+`` immediately after ``7``."""
+    parsed = _setting_number(setting)
+    if parsed is not None:
+        number, is_plus = parsed
+        return (0, number, int(is_plus), str(setting))
+    # Real-data datasets are ordered by their case-study number, but keep their
+    # human-readable labels on the axis.
+    numbers = re.findall(r'\d+', str(setting))
+    return (1, int(numbers[0]) if numbers else 0, 0, str(setting))
+
+
+def _short_forest_label(setting, labels=None):
+    """Y-axis name for a simulation setting in the forest plot.
+
+    The forest uses ``Setting 1``, ``Setting 2``, ... instead of the long
+    distribution descriptions. The extra sensitivity setting is ``Setting 7+``.
+    """
+    parsed = _setting_number(setting)
+    if parsed is not None:
+        number, is_plus = parsed
+        return f'Setting {number}{"+" if is_plus else ""}'
 
     # Real-data and unknown settings keep their supplied label. Drop only a
     # trailing sensitivity marker, which now belongs in the plot title.
     label = _title(setting, labels)
-    return re.sub(r'\s*\(sensitivity\)\s*$', '', label, flags=re.IGNORECASE)
+    label = re.sub(r'\s*\(sensitivity\)\s*$', '', label, flags=re.IGNORECASE)
+    match = re.match(r'Setting\s+(\d+\+?)', label, flags=re.IGNORECASE)
+    return f'Setting {match.group(1)}' if match else label
 
 
 def _half_violin_side(method, index=0):
@@ -654,9 +725,10 @@ def plot_effect_forest(effect_frame, metrics=('AUC', 'Brier'), labels=None,
     If different settings select different top models, only that setting's
     selected models get rows, so no empty rows are added. Each method uses the
     same colour as in the violin/box plots. The legend only identifies the mean
-    paired effect. A dashed line at 0 marks no difference. Sensitivity reports
-    add ``(Sensitivity)`` to the title and use short setting names on the left
-    axis so the description fits in two or three words.
+    paired effect. A dashed line at 0 marks no difference. Simulation settings
+    are labelled ``Setting 1`` ... ``Setting 8`` on the left axis, with
+    ``Setting 7+`` directly after ``Setting 7`` in sensitivity reports. Those
+    reports also add ``(Sensitivity)`` to the title.
 
     With several metrics, ``save_path`` gets the metric name added before the
     suffix (``forest.png`` -> ``forest_AUC.png``).
@@ -699,7 +771,7 @@ def plot_effect_forest(effect_frame, metrics=('AUC', 'Brier'), labels=None,
         work = frame.copy()
         if 'Foundation rank' not in work.columns:
             work['Foundation rank'] = work.groupby(level=0).cumcount() + 1
-        settings = list(dict.fromkeys(work.index))
+        settings = sorted(set(work.index), key=_setting_order_key)
 
         records = []
         for setting, row in work.iterrows():

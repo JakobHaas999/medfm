@@ -1124,6 +1124,7 @@ wheels = [
 name = "medfm"
 version = "0.0.1"
 source = { editable = "." }
+default-groups = ["dev", "notebook"]
 dependencies = [
     { name = "catboost" },
     { name = "certifi" },

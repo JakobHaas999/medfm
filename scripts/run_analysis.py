@@ -169,7 +169,8 @@ def main(argv=None):
         plot_violin_grid(results, names, labels=labels, metric='AUC', dir=plots, save_path='auc_violin.png', bayes_auc=bayes, show_bayes_auc=not args.no_bayes_auc)
         plot_violin_grid(results, names, labels=labels, metric='Brier', dir=plots, save_path='brier_violin.png')
         plot_roc_curves_grid(results, names, labels=labels, dir=plots, save_path='roc.png', bayes_auc=bayes, show_bayes_roc=not args.no_bayes_roc)
-        plot_runtime_barplot_simple(results, names, labels=labels, dir=plots, save_path='runtime.png')
+        plot_runtime_barplot_simple(results, names, labels=labels, dir=plots,
+                                    save_path='runtime.png', table=True)
         if effect is not None:
             plot_effect_forest(effect.data, effect_samples=effect_samples,
                                labels=labels, dir=plots, save_path='forest.png',

@@ -22,10 +22,20 @@ GROUPS = [
     (GROUP_LABELS['foundation'], FOUNDATION_METHODS),
 ]
 
-# Scalar metrics only. FPR/TPR/Probas are list-valued — used by plots.
+# Only these three are classification results used for ranking and comparison.
 # ClassError is the observed misclassification rate, not squared error.
-METRICS = ['AUC', 'ClassError', 'Brier', 'Time', 'SetupTime', 'TuneTime',
-           'FitTime', 'PredictTime', 'CalSlope', 'CalIntercept']
+COMPARISON_METRICS = ['AUC', 'ClassError', 'Brier']
+
+# The measures table also reports runtime columns. Calibration columns are not
+# reported anywhere: callers may still have them in saved results, but reports
+# deliberately leave them out.
+MEASURE_METRICS = COMPARISON_METRICS + [
+    'Time', 'SetupTime', 'TuneTime', 'FitTime', 'PredictTime',
+]
+
+# Backwards-compatible default for the comparison helpers and for callers that
+# import METRICS from this module.
+METRICS = COMPARISON_METRICS
 
 HIGHER_IS_BETTER = {'AUC'}
 
@@ -106,7 +116,8 @@ def build_measures_table(errors_dict, metrics=None, filename='table.csv',
     """rows=(Setting, Metric), cols=method, values='mean ± SD (MCSE …)'.
 
     The SD describes run-to-run spread; the bracketed MCSE is the SE of the
-    reported mean (SD / sqrt(number of Monte Carlo runs)).
+    reported mean (SD / sqrt(number of Monte Carlo runs)). Calibration columns
+    are deliberately excluded, even when a caller passes them in ``metrics``.
 
     errors_dict : {setting_id: pd.DataFrame}
     Set filename=None to display the styled table without saving a CSV.
@@ -114,8 +125,9 @@ def build_measures_table(errors_dict, metrics=None, filename='table.csv',
     if not errors_dict:
         print(f"⚠️ no data to build {filename} — skipping")
         return None
-    
-    metrics = metrics or METRICS
+
+    metrics = [m for m in (metrics or MEASURE_METRICS)
+               if m not in ('CalSlope', 'CalIntercept')]
     methods = _available_methods(errors_dict.values(), methods or METHODS, metrics)
 
     rows = []
@@ -186,30 +198,28 @@ def build_gain_table(base_dict, sens_dict, metrics=GAIN_METRICS, methods=None,
 
 
 def _rank_methods(df, methods, metric):
-    """Rank observed means; calibration uses mean absolute distance from its ideal."""
+    """Rank observed means (lower is better except for AUC)."""
     scores = {}
     for method in methods:
         column = f'{method}_{metric}'
         if column not in df.columns:
             continue
-        values = pd.to_numeric(df[column], errors='coerce').replace([np.inf, -np.inf], np.nan)
-        if metric == 'CalSlope':
-            values = (values - 1.0).abs()
-        elif metric == 'CalIntercept':
-            values = values.abs()
-        if values.notna().any():
+        values = _numeric(df[column])
+        if not values.empty:
             scores[method] = values.mean()
     return sorted(scores, key=scores.get, reverse=metric in HIGHER_IS_BETTER)
 
 
 def build_best_methods_table(errors_dict, metrics=None, filename='best_methods.csv', tables_dir=None):
-    """Best and second-best methods in each reporting group, per setting/dataset and measure.
+    """Best and second-best methods in each reporting group, per setting/dataset.
 
-    Groups are baseline, tree, and foundation. Rank once using all repetitions;
-    show the raw measure as mean, sample SD, and Monte Carlo SE of the mean.
-    Ties use the existing method order. This is a descriptive result summary.
+    Only the three classification measures (AUC, ClassError, Brier) are ranked.
+    Runtime is not a metric here: ``Best time`` and ``Second time`` hold the
+    mean wall-clock seconds of the corresponding methods, so each runtime is
+    attached to the method it belongs to. Ties use the existing method order.
     """
-    metrics = metrics or METRICS
+    metrics = [m for m in (metrics or COMPARISON_METRICS)
+               if m in COMPARISON_METRICS]
     rows = []
     for sid, df in errors_dict.items():
         for metric in metrics:
@@ -226,12 +236,17 @@ def build_best_methods_table(errors_dict, metrics=None, filename='best_methods.c
                         row[f'{label} mean'] = values.mean()
                         row[f'{label} SD'] = values.std()
                         row[f'{label} MCSE'] = _mcse(values)
+                        # Informational only: runtime of this method in seconds.
+                        time_col = f'{method}_Time'
+                        row[f'{label} time'] = (_numeric(df[time_col]).mean()
+                                                if time_col in df.columns else np.nan)
                         row[f'{label} runs'] = values.count()
                     else:
                         row[f'{label} method'] = '—'
                         row[f'{label} mean'] = np.nan
                         row[f'{label} SD'] = np.nan
                         row[f'{label} MCSE'] = np.nan
+                        row[f'{label} time'] = np.nan
                         row[f'{label} runs'] = 0
                 rows.append(row)
     if not rows:
@@ -240,11 +255,15 @@ def build_best_methods_table(errors_dict, metrics=None, filename='best_methods.c
     table = pd.DataFrame(rows).set_index(['Setting', 'Metric', 'Group'])
     printable = _presentation(table)
     _save_table(printable, filename, tables_dir)
-    return printable.style.format(
-        {column: '{:.4f}' if column.endswith('MCSE') else '{:.3f}'
-         for column in printable if column.endswith(('mean', 'SD', 'MCSE'))},
-        na_rep='—',
-    )
+    formats = {}
+    for column in printable:
+        if column.endswith('MCSE'):
+            formats[column] = '{:.4f}'
+        elif column.endswith(('mean', 'SD')):
+            formats[column] = '{:.3f}'
+        elif column.endswith(' time'):
+            formats[column] = '{:.1f}'
+    return printable.style.format(formats, na_rep='—')
 
 
 def _effect_pairs(df, metric, all_models=False, n_foundation=2):
@@ -274,18 +293,18 @@ def _effect_pairs(df, metric, all_models=False, n_foundation=2):
 def build_effect_table(errors_dict, metrics=None, filename='best_vs_best.csv', tables_dir=None, all_models=False, n_foundation=2):
     """Summarize within-run differences, foundation minus tree, as mean, SD, and MCSE.
 
-    Baseline methods are excluded from this head-to-head comparison. Select the
-    best tree method and the top ``n_foundation`` foundation methods once per
-    measure using all repetitions (``n_foundation=0`` uses every available
-    foundation model). Each setting/measure gets one row per selected foundation
-    compared against the same best tree. ``Foundation rank`` identifies the row
-    so effects can be drawn as separate series. A positive mean effect means the
-    foundation model scored higher; for Brier and ClassError lower is better, so
-    a negative effect favors the foundation model. With all_models=True, compare
-    every model with the best method in the other comparison group. Calibration
-    effects use raw slopes/intercepts, not their distances.
+    Only AUC, ClassError and Brier are comparison metrics. Runtime is not
+    reported here. Baseline methods are excluded. Select the best tree
+    method and the top ``n_foundation`` foundation methods once per measure
+    using all repetitions (``n_foundation=0`` uses every available foundation
+    model). Each setting/measure gets one row per selected foundation compared
+    against the same best tree; ``Foundation rank`` identifies the row so effects
+    can be drawn as separate series. A positive mean effect means the foundation
+    model scored higher; for Brier and ClassError lower is better, so a negative
+    effect favors the foundation model.
     """
-    metrics = metrics or METRICS
+    metrics = [m for m in (metrics or COMPARISON_METRICS)
+               if m in COMPARISON_METRICS]
     rows = []
     for sid, df in errors_dict.items():
         for metric in metrics:
@@ -300,12 +319,13 @@ def build_effect_table(errors_dict, metrics=None, filename='best_vs_best.csv', t
                 rows.append({
                     'Setting': sid, 'Metric': metric,
                     'Foundation rank': foundation_rank,
-                    'Tree method': tree_method, 'Foundation method': foundation_method,
-                    'Tree mean': paired['Tree'].mean(),
+                    'Foundation method': foundation_method,
                     'Foundation mean': paired['Foundation'].mean(),
+                    'Tree method': tree_method,
+                    'Tree mean': paired['Tree'].mean(),
                     'Mean effect': differences.mean(), 'SD effect': differences.std(),
                     'MCSE effect': _mcse(differences),
-                    'Paired runs': len(differences),
+                    'Runs': len(differences),
                 })
     if not rows:
         print(f"⚠️ no group comparisons for {filename} — skipping")
@@ -330,7 +350,8 @@ def build_effect_samples(errors_dict, metrics=None, filename=None, tables_dir=No
     models (otherwise the top ``n_foundation``). Set ``filename`` to also save
     the long table as a CSV.
     """
-    metrics = metrics or METRICS
+    metrics = [m for m in (metrics or COMPARISON_METRICS)
+               if m in COMPARISON_METRICS]
     rows = []
     for sid, df in errors_dict.items():
         for metric in metrics:
@@ -360,12 +381,7 @@ def _style_best(row):
     vals = {}
     for col in row.index:
         try:
-            value = float(row[col].split(' ± ')[0])
-            if metric == 'CalSlope':
-                value = abs(value - 1.0)
-            elif metric == 'CalIntercept':
-                value = abs(value)
-            vals[col] = value
+            vals[col] = float(row[col].split(' ± ')[0])
         except Exception:
             pass
     if not vals:

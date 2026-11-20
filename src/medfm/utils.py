@@ -113,18 +113,8 @@ def save_outputs(errors, name, output_dir=None, meta=None):
             frame[column] = frame[column].map(lambda values: json.dumps(np.asarray(values).tolist()))
     frame.to_csv(csv_path, index=False)
 
-    # Monte Carlo SEs
-
-    mcse_dir = os.path.join(output_dir, 'mcse')
-    os.makedirs(mcse_dir, exist_ok=True)
-    mcse_summary = _mcse_summary(frame)
-    mcse_summary.to_csv(os.path.join(mcse_dir, f'{name}.csv'), index=False)
-
     # ── sidecar metadata ──
     if meta is not None:
-        meta['mcse'] = {
-            f'{row.Method}_{row.Metric}': row.MCSE for row in mcse_summary.itertuples()
-        }
         meta_path = os.path.join(output_dir, f"{name}.meta.json")
 
         def _to_jsonable(v):
@@ -150,36 +140,12 @@ def save_outputs(errors, name, output_dir=None, meta=None):
 
 #################################################################################
 
-# Scalar measures for which a Monte Carlo SE of the mean is meaningful.
-# FPR/TPR/Probas are per-run arrays, so they are intentionally excluded.
-MCSE_METRICS = ('AUC', 'ClassError', 'Brier', 'Time', 'SetupTime', 'TuneTime',
-                'FitTime', 'PredictTime', 'CalSlope', 'CalIntercept')
-
-
 def monte_carlo_se(values):
     """SE of the mean over Monte Carlo runs: sample SD / sqrt(number of runs)."""
     observed = pd.to_numeric(values, errors='coerce').replace([np.inf, -np.inf], np.nan).dropna()
     if observed.count() < 2:
         return np.nan
     return float(observed.std(ddof=1) / np.sqrt(observed.count()))
-
-
-def _mcse_summary(frame):
-    """Long table of runs, mean, SD and MCSE for every scalar result column."""
-    rows = []
-    for column in frame.columns:
-        method, separator, metric = column.rpartition('_')
-        if not separator or metric not in MCSE_METRICS:
-            continue
-        values = pd.to_numeric(frame[column], errors='coerce').replace(
-            [np.inf, -np.inf], np.nan).dropna()
-        rows.append({
-            'Method': method, 'Metric': metric, 'Runs': int(values.count()),
-            'Mean': float(values.mean()) if not values.empty else np.nan,
-            'SD': float(values.std(ddof=1)) if values.count() > 1 else np.nan,
-            'MCSE': monte_carlo_se(values),
-        })
-    return pd.DataFrame(rows, columns=['Method', 'Metric', 'Runs', 'Mean', 'SD', 'MCSE'])
 
 
 # Keep model messages in files while the main progress bar stays visible.
