@@ -4,6 +4,7 @@ from matplotlib.patches import Patch, Rectangle
 from pathlib import Path
 import numpy as np
 import pandas as pd
+import re
 
 
 # All plots use this order. Baseline methods come first, then tree ensemble
@@ -584,6 +585,39 @@ def plot_runtime_barplot_simple(errors_dict, settings_to_show, labels=None,
 # ─────────────────────────────────────────────────────────────────────
 # Forest plot of the best-vs-best (foundation minus tree) effect
 # ─────────────────────────────────────────────────────────────────────
+# Short names for the forest y-axis. The full setting descriptions stay in the
+# metadata and other plot titles; only these compact labels go on the axis.
+# Each is at most three words so the nine sensitivity rows stay readable.
+SHORT_SETTING_LABELS = {
+    'simulation_setting1': 'Low-dim Gaussian',
+    'simulation_setting2': 'Quadratic signal',
+    'simulation_setting3': 'Linear + quadratic',
+    'simulation_setting4': 'Class imbalance',
+    'simulation_setting5': 'Heavy-tailed t',
+    'simulation_setting6': 'Exp covariance decay',
+    'simulation_setting7+': 'Heavy-tail mix (p=40)',
+    'simulation_setting7': 'Sparse Gaussian (p=40)',
+    'simulation_setting8': 'Sparse Gaussian (p=100)',
+}
+
+
+def _short_forest_label(setting, labels=None):
+    """Compact y-axis name for a simulation setting in the forest plot."""
+    key = str(setting)
+    if key.endswith('_sensitivity'):
+        key = key[:-len('_sensitivity')]
+    short_id = re.fullmatch(r'S(\d+\+?)', key)
+    if short_id:
+        key = f'simulation_setting{short_id.group(1)}'
+    if key in SHORT_SETTING_LABELS:
+        return SHORT_SETTING_LABELS[key]
+
+    # Real-data and unknown settings keep their supplied label. Drop only a
+    # trailing sensitivity marker, which now belongs in the plot title.
+    label = _title(setting, labels)
+    return re.sub(r'\s*\(sensitivity\)\s*$', '', label, flags=re.IGNORECASE)
+
+
 def _half_violin_side(method, index=0):
     """Put TabPFN above the setting row and TabICL below it.
 
@@ -620,7 +654,9 @@ def plot_effect_forest(effect_frame, metrics=('AUC', 'Brier'), labels=None,
     If different settings select different top models, only that setting's
     selected models get rows, so no empty rows are added. Each method uses the
     same colour as in the violin/box plots. The legend only identifies the mean
-    paired effect. A dashed line at 0 marks no difference.
+    paired effect. A dashed line at 0 marks no difference. Sensitivity reports
+    add ``(Sensitivity)`` to the title and use short setting names on the left
+    axis so the description fits in two or three words.
 
     With several metrics, ``save_path`` gets the metric name added before the
     suffix (``forest.png`` -> ``forest_AUC.png``).
@@ -738,6 +774,10 @@ def plot_effect_forest(effect_frame, metrics=('AUC', 'Brier'), labels=None,
         row_positions, row_labels, left_ticks, left_labels = [], [], [], []
         row_index = {}
         position = 0
+        is_sensitivity = (
+            any('sensitivity' in str(s).lower() for s in settings)
+            or any('sensitivity' in str(_title(s, labels)).lower() for s in settings)
+        )
         for setting in settings:
             start = position
             tree_name = best_tree.get(setting, 'best tree')
@@ -748,7 +788,7 @@ def plot_effect_forest(effect_frame, metrics=('AUC', 'Brier'), labels=None,
                 row_labels.append(f'{DISPLAY_NAMES.get(method, method)} vs {tree_display}')
                 position += 1
             left_ticks.append((start + position - 1) / 2)
-            left_labels.append(_title(setting, labels))
+            left_labels.append(_short_forest_label(setting, labels))
 
         fig_h = figsize[1] if figsize else max(3.0, 0.48 * len(row_positions) + 1.8)
         fig_w = figsize[0] if figsize else 11
@@ -800,10 +840,10 @@ def plot_effect_forest(effect_frame, metrics=('AUC', 'Brier'), labels=None,
         ax2.set_ylabel('Foundation model (vs best tree)', fontsize=11)
         ax2.margins(y=0.08)
         ax.set_xlabel(f'Paired effect on {metric} (foundation - tree)', fontsize=12)
-        ax.set_title(
-            f'Paired {metric} effect for Foundation models versus best tree ensemble',
-            fontsize=13, pad=12,
-        )
+        title = f'Paired {metric} effect for Foundation models versus best tree ensemble'
+        if is_sensitivity:
+            title += ' (Sensitivity)'
+        ax.set_title(title, fontsize=13, pad=12)
         ax.grid(axis='x', alpha=0.3)
         ax.margins(x=0.25, y=0.08)
         ax.invert_yaxis()
