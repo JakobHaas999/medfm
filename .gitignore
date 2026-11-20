@@ -7,6 +7,11 @@ token.py
 # Raw data
 /io/real_data/
 
+# Generated result CSVs above GitHub's 100 MB per-file limit.
+# The corresponding *.meta.json files and mcse/*.csv summaries remain tracked.
+/io/real_data_results/main/realdata_case_study_1_echo_notes.csv
+/io/real_data_results/main/realdata_case_study_2_blood_glucose_management_1.csv
+
 # when using uv sync it will create .venv and install project dependencies
 .venv/
 
