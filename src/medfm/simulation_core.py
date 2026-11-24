@@ -357,7 +357,8 @@ def evaluate_on_sim_data(n, mu, sigma1, sigma2, df=None, dist="Normal", iter=100
 
         for res, records, log_path in tqdm(results, total=iter, desc=progress_label or "Simulated-data iterations", file=progress, dynamic_ncols=True):
             captured_warnings.extend(records)
-            print(Path(log_path).read_text(), end="")
+            if Path(log_path).is_file():
+                print(Path(log_path).read_text(), end="")
             errors['y_test_all'].append(res['y_test'])
             for key, prefix in [
                 ('L-SLR', 'L-SLR_'),

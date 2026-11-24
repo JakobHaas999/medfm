@@ -1,3 +1,5 @@
+import errno
+import io
 import os, sys
 import numpy as np
 import glob, re
@@ -150,23 +152,45 @@ def monte_carlo_se(values):
 
 # Keep model messages in files while the main progress bar stays visible.
 
+def _write_diagnostic(path, text):
+    """Write a warning/log file, retrying NFS stale-handle errors.
+
+    These files are diagnostics only. If the shared filesystem keeps refusing
+    the write, print a short note and let the analysis continue; the result
+    CSV/meta files are written separately and are unaffected.
+    """
+    for attempt in range(3):
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(text, encoding="utf-8")
+            return
+        except OSError as error:
+            if error.errno not in (errno.ESTALE, errno.EIO, errno.EAGAIN):
+                break
+            time.sleep(0.5 * (attempt + 1))
+    print(f"medfm: skipped diagnostic file {path}", file=sys.stderr)
+
+
 @contextmanager
-def capture_output(warnings_file, output_dir):
+def capture_output(warnings_file, output_dir=None, paths=None):
     """Temporarily send model messages to files instead of the notebook/terminal.
 
     The analysis uses this as:
         with capture_output(warnings_file, output_dir) as (warns, progress):
             # Run the models; pass file=progress to the main tqdm bar.
 
-    Python warnings are saved as JSON. Printed messages and library logs go
-    to the companion .log file. The original output settings are restored
-    when the block ends, including when a model raises an error.
+    Python warnings are saved as JSON and printed messages/library logs go to
+    a companion .log file. Messages are collected in memory during the run and
+    written at the end, so an NFS stale-handle error cannot interrupt the
+    analysis. ``paths`` may be a list; it receives the ``(warnings, log)``
+    paths. Original output settings are restored even when a model raises.
     """
-    # Choose a unique warning filename unless the caller supplied one.
     if warnings_file is None:
         warnings_file = Path(output_dir) / "warnings" / f"{time.time_ns()}.warnings.json"
     warning_path = Path(warnings_file)
-    warning_path.parent.mkdir(parents=True, exist_ok=True)
+    log_path = warning_path.with_suffix(".log")
+    if paths is not None:
+        paths.extend([warning_path, log_path])
     # Keep the original screen output for the main progress bar.
     # tqdm needs dynamic_ncols=True to detect its width after stderr is redirected.
     progress = sys.stderr
@@ -176,41 +200,38 @@ def capture_output(warnings_file, output_dir):
         "", "exaonetabular", "huggingface_hub", "tabicl", "tabpfn",
         "tabpfn_v25", "tabpfn_v26", "tabpfn_v3", "tabpfn_v35",
     )]
-    # Remember the current settings so this changes only the analysis block.
     original_logging = [(logger.handlers[:], logger.level, logger.propagate) for logger in loggers]
-    # "x" creates a new file and prevents overwriting an earlier run.
-    with warning_path.open("x", encoding="utf-8") as warning_file:
-        with warning_path.with_suffix(".log").open("x", encoding="utf-8") as log:
-            handler = logging.StreamHandler(log)
-            try:
-                for logger in loggers:
-                    logger.handlers = [handler]
-                    logger.setLevel(logging.INFO)
-                    logger.propagate = False
-                # Capture once around the whole run, including its thread workers.
-                # Capture print() and library progress messages, including TabICL.
-                with redirect_stdout(log), redirect_stderr(log):
-                    with warnings.catch_warnings(record=True) as recorded:
-                        # Record every warning, including repeated convergence warnings.
-                        warnings.simplefilter("always")
-                        try:
-                            # Run the simulation/resampling code inside its with block.
-                            yield saved_warnings, progress
-                        finally:
-                            # Convert warning objects into ordinary dictionaries for JSON.
-                            saved_warnings.extend({
-                                "category": item.category.__name__,
-                                "message": str(item.message),
-                                "filename": item.filename,
-                                "lineno": item.lineno,
-                            } for item in recorded)
-            finally:
-                # Restore logging and save warnings even if execution failed.
-                for logger, (handlers, level, propagate) in zip(loggers, original_logging):
-                    logger.handlers = handlers
-                    logger.setLevel(level)
-                    logger.propagate = propagate
-                json.dump(saved_warnings, warning_file, indent=2)
+    # Collect messages in memory first; no file handles are open during the run.
+    log_sink = io.StringIO()
+    handler = logging.StreamHandler(log_sink)
+    try:
+        for logger in loggers:
+            logger.handlers = [handler]
+            logger.setLevel(logging.INFO)
+            logger.propagate = False
+        # Capture once around the whole run, including its thread workers.
+        with redirect_stdout(log_sink), redirect_stderr(log_sink):
+            with warnings.catch_warnings(record=True) as recorded:
+                warnings.simplefilter("always")
+                try:
+                    # Run the simulation/resampling code inside its with block.
+                    yield saved_warnings, progress
+                finally:
+                    # Convert warning objects into ordinary dictionaries for JSON.
+                    saved_warnings.extend({
+                        "category": item.category.__name__,
+                        "message": str(item.message),
+                        "filename": item.filename,
+                        "lineno": item.lineno,
+                    } for item in recorded)
+    finally:
+        # Restore logging and save warnings even if execution failed.
+        for logger, (handlers, level, propagate) in zip(loggers, original_logging):
+            logger.handlers = handlers
+            logger.setLevel(level)
+            logger.propagate = propagate
+        _write_diagnostic(warning_path, json.dumps(saved_warnings, indent=2))
+        _write_diagnostic(log_path, log_sink.getvalue())
 
 
 #################################################################################

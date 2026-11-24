@@ -229,9 +229,16 @@ def main(argv=None):
             prevalence = float(np.mean(np.asarray(y)))
             sample_sizes = prevalence_sample_sizes(y)
             name = f'realdata_{dataset}'
+            # Blood gas has 119 features and the foundation models dominated its
+            # runtime. Keep only the two strongest representatives for this
+            # dataset; the other case studies still run every foundation model.
+            foundation_models = (
+                ['TabPFN_v35', 'TabICL-V2']
+                if dataset_key == 'case_study_3_blood_gas_oximetry' else None
+            )
             errors = evaluate_on_real_data(
                 X, y, sample_sizes, groups=groups, iter=args.repetitions, g_seed=seed,
-                n_jobs=args.jobs, include_exaone=False,
+                n_jobs=args.jobs, include_exaone=False, foundation_models=foundation_models,
                 progress_label=f"{dataset_key.replace('_', ' ').capitalize()} resampling iterations",
                 warnings_file=output / 'warnings' / f'{name}.warnings.json',
             )
@@ -240,6 +247,7 @@ def main(argv=None):
                 'prevalence': prevalence,
                 'g_seed': seed, 'n_features': int(X.shape[1]), 'n_samples': int(X.shape[0]),
                 'include_exaone': False, 'execution': 'parallel',
+                'foundation_models': foundation_models if foundation_models else 'all',
                 'workers': args.jobs, 'threads_per_worker': 1,
             })
     print(f'Results saved in {output}')

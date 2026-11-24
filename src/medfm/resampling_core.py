@@ -51,7 +51,14 @@ def _run_and_pack(fn, y_test, *args, **kwargs):
             setup_time, tune_time, fit_time, predict_time)
     
  
- # resampling Functions for realdata
+ # Foundation models available for real-data runs. A dataset may select a subset;
+# none of the classical models depend on this list.
+FOUNDATION_METHOD_KEYS = (
+    'TabPFN_v25', 'TabPFN_v26', 'TabPFN_v3', 'TabPFN_v35',
+    'TabICL-V1', 'TabICL-V2',
+)
+
+# resampling Functions for realdata
 
 
 def _group_split(rows, y_np, groups_np, seed, test_size=0.2, max_tries=10):
@@ -130,7 +137,8 @@ def _take_patient_rows(rows, y_np, groups_np, cls, size, side, rng, exclude=None
 
 # part1 - fucntion for single iteration calcualtion
 def _single_real_iteration(i, X_np, y_np, groups_np,
-                           n1_tr, n2_tr, n1_te, n2_te, g_seed, include_exaone=False):
+                           n1_tr, n2_tr, n1_te, n2_te, g_seed, include_exaone=False,
+                           foundation_models=None):
 
     """Sample training and test rows from disjoint patient groups and evaluate every model once.
 
@@ -193,6 +201,9 @@ def _single_real_iteration(i, X_np, y_np, groups_np,
     X_train_sub, X_val = median_impute(X_train_sub, X_val)
     X_train, X_test = median_impute(X_train, X_test)
 
+    # A dataset can keep only the named foundation models; None keeps all.
+    wanted = lambda name: foundation_models is None or name in foundation_models
+
     # run models and store
     
     results = {
@@ -227,26 +238,25 @@ def _single_real_iteration(i, X_np, y_np, groups_np,
             X_train, X_test, y_train, y_test,
             X_train_sub, y_train_sub, X_val, y_val,
             random_state=i+g_seed),
-        'TabPFN_v25': _run_and_pack(
-            run_tabpfn_v25, y_test,
-            X_train, X_test, y_train, y_test, random_state=i+g_seed),
-        'TabPFN_v26': _run_and_pack(
-            run_tabpfn_v26, y_test,
-            X_train, X_test, y_train, y_test, random_state=i+g_seed),
-        'TabPFN_v3': _run_and_pack(
-            run_tabpfn_v3, y_test,
-            X_train, X_test, y_train, y_test, random_state=i+g_seed),
-        'TabPFN_v35': _run_and_pack(
-            run_tabpfn_v35, y_test,
-            X_train, X_test, y_train, y_test, random_state=i+g_seed),
-        'TabICL-V1': _run_and_pack(
-            run_tabicl_v1, y_test,
-            X_train, X_test, y_train, y_test, random_state=i+g_seed),
-        'TabICL-V2': _run_and_pack(
-            run_tabicl, y_test,
-            X_train, X_test, y_train, y_test, random_state=i+g_seed),
-        
     }
+    if wanted('TabPFN_v25'):
+        results['TabPFN_v25'] = _run_and_pack(
+            run_tabpfn_v25, y_test, X_train, X_test, y_train, y_test, random_state=i+g_seed)
+    if wanted('TabPFN_v26'):
+        results['TabPFN_v26'] = _run_and_pack(
+            run_tabpfn_v26, y_test, X_train, X_test, y_train, y_test, random_state=i+g_seed)
+    if wanted('TabPFN_v3'):
+        results['TabPFN_v3'] = _run_and_pack(
+            run_tabpfn_v3, y_test, X_train, X_test, y_train, y_test, random_state=i+g_seed)
+    if wanted('TabPFN_v35'):
+        results['TabPFN_v35'] = _run_and_pack(
+            run_tabpfn_v35, y_test, X_train, X_test, y_train, y_test, random_state=i+g_seed)
+    if wanted('TabICL-V1'):
+        results['TabICL-V1'] = _run_and_pack(
+            run_tabicl_v1, y_test, X_train, X_test, y_train, y_test, random_state=i+g_seed)
+    if wanted('TabICL-V2'):
+        results['TabICL-V2'] = _run_and_pack(
+            run_tabicl, y_test, X_train, X_test, y_train, y_test, random_state=i+g_seed)
     if include_exaone:
         results['EXAONE'] = _run_and_pack(
             run_exaone, y_test,
@@ -259,7 +269,7 @@ def _single_real_iteration(i, X_np, y_np, groups_np,
 
 
 #  part2 - fucntion for all iterations
-def evaluate_on_real_data(X, y, n, groups=None, iter=100, g_seed = 2025, *, include_exaone=False, warnings_file=None, n_jobs=10, progress_label=None):
+def evaluate_on_real_data(X, y, n, groups=None, iter=100, g_seed = 2025, *, include_exaone=False, warnings_file=None, n_jobs=10, progress_label=None, foundation_models=None):
     #np.random.seed(g_seed)
 
     """Repeat patient-grouped sampling and model evaluation on an existing dataset.
@@ -267,6 +277,8 @@ def evaluate_on_real_data(X, y, n, groups=None, iter=100, g_seed = 2025, *, incl
     Check the available class sizes first, run repetitions in parallel, and combine their results.
     Patients in `groups` (or rows when groups is None) stay on one side of the outer and
     inner splits. progress_label optionally identifies the dataset in the progress bar.
+    ``foundation_models`` may name a subset of the pretrained models; ``None``
+    keeps all of them.
     """
     initialize_worker()
     X_np = np.asarray(X, dtype=np.float32)
@@ -339,6 +351,13 @@ def evaluate_on_real_data(X, y, n, groups=None, iter=100, g_seed = 2025, *, incl
         'y_test_all': []
     }
 
+    if foundation_models is not None:
+        unknown = set(foundation_models) - set(FOUNDATION_METHOD_KEYS)
+        if unknown:
+            raise ValueError(f"Unknown foundation models: {sorted(unknown)}")
+        excluded = set(FOUNDATION_METHOD_KEYS) - set(foundation_models)
+        errors = {key: values for key, values in errors.items()
+                  if not any(key.startswith(f'{model}_') for model in excluded)}
     if not include_exaone:
         errors = {key: values for key, values in errors.items() if not key.startswith("EXAONE_")}
     if n_jobs < 1:
@@ -353,14 +372,15 @@ def evaluate_on_real_data(X, y, n, groups=None, iter=100, g_seed = 2025, *, incl
             delayed(run_logged_iteration)(
                 _single_real_iteration, worker_dir / f"iteration_{i + 1}.warnings.json",
                 i, X_np, y_np, groups_np,
-                n1_tr, n2_tr, n1_te, n2_te, g_seed, include_exaone,
+                n1_tr, n2_tr, n1_te, n2_te, g_seed, include_exaone, foundation_models,
             )
             for i in range(iter)
         )
 
         for res, records, log_path in tqdm(results, total=iter, desc=progress_label or "Real-data resampling", file=progress, dynamic_ncols=True):
             captured_warnings.extend(records)
-            print(Path(log_path).read_text(), end="")
+            if Path(log_path).is_file():
+                print(Path(log_path).read_text(), end="")
             errors['y_test_all'].append(res['y_test'])
             for key, prefix in [
                 ('L-SLR', 'L-SLR_'),
@@ -377,7 +397,7 @@ def evaluate_on_real_data(X, y, n, groups=None, iter=100, g_seed = 2025, *, incl
                 ('TabICL-V1', 'TabICL-V1_'),
                 ('TabICL-V2', 'TabICL-V2_')
             ]:
-                if key == "EXAONE" and not include_exaone:
+                if key not in res or (key == "EXAONE" and not include_exaone):
                     continue
                 (t, class_error, auc, fpr, tpr, proba, brier, slope, intercept,
                  setup_time, tune_time, fit_time, predict_time) = res[key]

@@ -53,9 +53,11 @@ def run_logged_iteration(function, warnings_file, *args):
     from .utils import capture_output
 
     path = Path(warnings_file)
-    with capture_output(path, path.parent) as (records, progress):
+    paths = []
+    with capture_output(path, path.parent, paths=paths) as (records, progress):
         result = function(*args)
-    return result, records, str(path.with_suffix(".log"))
+    log_path = paths[1] if paths else path.with_suffix(".log")
+    return result, records, str(log_path)
 
 
 _TORCH_LOCK = RLock()
